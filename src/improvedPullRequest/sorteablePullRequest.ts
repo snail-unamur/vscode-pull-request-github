@@ -1,8 +1,3 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) dummy copyright. All rights reserved.
- *  Licensed under dummy. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-
 import { PullRequestModel } from '../github/pullRequestModel';
 import { SmellScoreCalculator } from './smellScoreCalculator';
 

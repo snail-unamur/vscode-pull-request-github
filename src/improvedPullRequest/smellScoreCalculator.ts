@@ -1,8 +1,3 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) dummy copyright. All rights reserved.
- *  Licensed under dummy. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-
 import { LocMetric } from './smellScoreCalculator/locMetric';
 import { SmellScoreMetric } from './smellScoreCalculator/smellScoreMetric';
 
