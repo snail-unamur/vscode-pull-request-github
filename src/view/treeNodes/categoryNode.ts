@@ -109,7 +109,7 @@ export namespace DefaultQueries {
 	export namespace Queries {
 		export const LOCAL = 'Local Pull Request Branches';
 		export const ALL = 'All Open';
-		export const IMPROVEPR = 'Fit for me';
+		export const IMPROVEPR = 'Fit For Me';
 	}
 	export namespace Values {
 		export const DEFAULT = 'default';
