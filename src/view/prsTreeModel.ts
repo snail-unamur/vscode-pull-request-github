@@ -37,7 +37,7 @@ export class PrsTreeModel extends Disposable {
 	// Key is identifier from createPRNodeUri
 	private readonly _queriedPullRequests: Map<string, PRStatusChange> = new Map();
 
-	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All, ItemsResponseResult<PullRequestModel>>> = new Map();
+	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, ItemsResponseResult<PullRequestModel>>> = new Map();
 	private readonly _repoEvents: Map<FolderRepositoryManager, vscode.Disposable[]> = new Map();
 
 	constructor(private _telemetry: ITelemetry, private readonly _reposManager: RepositoriesManager, private readonly _context: vscode.ExtensionContext) {
@@ -180,7 +180,7 @@ export class PrsTreeModel extends Disposable {
 		this._onDidChangePrStatus.fire(changedStatuses);
 	}
 
-	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All, ItemsResponseResult<PullRequestModel>> {
+	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, ItemsResponseResult<PullRequestModel>> {
 		let cache = this._cachedPRs.get(folderRepoManager);
 		if (!cache) {
 			cache = new Map();
@@ -250,6 +250,35 @@ export class PrsTreeModel extends Disposable {
 			"pr.expand.all" : {}
 		*/
 		this._telemetry.sendTelemetryEvent('pr.expand.all');
+		// Don't await this._getChecks. It fires an event that will be listened to.
+		this._getChecks(prs.items);
+		this.hasLoaded = true;
+		return prs;
+	}
+
+	async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
+		const cache = this.getFolderCache(folderRepoManager);
+		if (!update && cache.has(PRType.ImprovePR) && !fetchNextPage) {
+			return cache.get(PRType.ImprovePR)!;
+		}
+
+		const prs = await folderRepoManager.getPullRequests(
+			PRType.All,
+			{ fetchNextPage }
+		);
+
+		// TODO: order the PRs based on the metrics
+		prs.items.sort((pr1, pr2) => -1);
+
+
+		cache.set(PRType.ImprovePR, prs);
+
+		/* __GDPR__
+			"pr.expand.all" : {}
+		*/
+
+		// Not useful for now
+		// this._telemetry.sendTelemetryEvent('pr.expand.all');
 		// Don't await this._getChecks. It fires an event that will be listened to.
 		this._getChecks(prs.items);
 		this.hasLoaded = true;

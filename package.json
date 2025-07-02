@@ -219,6 +219,10 @@
 						{
 							"label": "All Open",
 							"query": "default"
+						},
+						{
+							"label": "Fit for me",
+							"query": "default"
 						}
 					]
 				},

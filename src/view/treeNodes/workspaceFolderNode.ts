@@ -13,7 +13,7 @@ import { PRType } from '../../github/interface';
 import { NotificationProvider } from '../../github/notifications';
 import { PullRequestModel } from '../../github/pullRequestModel';
 import { PrsTreeModel } from '../prsTreeModel';
-import { CategoryTreeNode, isAllQuery, isLocalQuery } from './categoryNode';
+import { CategoryTreeNode, isAllQuery, isImprovePRQuery, isLocalQuery } from './categoryNode';
 import { TreeNode, TreeNodeParent } from './treeNode';
 
 export interface IQueryInfo {
@@ -87,6 +87,8 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 					return new CategoryTreeNode(parent, folderManager, telemetry, PRType.LocalPullRequest, notificationProvider, prsTreeModel, copilotManager);
 				} else if (isAllQuery(queryInfo)) {
 					return new CategoryTreeNode(parent, folderManager, telemetry, PRType.All, notificationProvider, prsTreeModel, copilotManager);
+				} else if (isImprovePRQuery(queryInfo)) {
+					return new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel, copilotManager);
 				}
 				return new CategoryTreeNode(parent, folderManager, telemetry, PRType.Query, notificationProvider, prsTreeModel, copilotManager, queryInfo.label, queryInfo.query);
 			}
