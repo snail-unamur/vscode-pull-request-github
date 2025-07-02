@@ -15,6 +15,7 @@ import { RepositoriesManager } from '../github/repositoriesManager';
 import { UnsatisfiedChecks } from '../github/utils';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
+import { SorteablePullRequest } from '../improvedPullRequest/sorteablePullRequest';
 
 export const EXPANDED_QUERIES_STATE = 'expandedQueries';
 
@@ -262,14 +263,15 @@ export class PrsTreeModel extends Disposable {
 			return cache.get(PRType.ImprovePR)!;
 		}
 
+
+		// FIXME : nothing garantue that will have the right PR because of the batch caching
 		const prs = await folderRepoManager.getPullRequests(
 			PRType.All,
 			{ fetchNextPage }
 		);
 
-		// TODO: order the PRs based on the metrics
-		prs.items.sort((pr1, pr2) => -1);
-
+		const sorteablePrs = prs.items.map(pr => new SorteablePullRequest(pr)).sort((pr1, pr2) => pr1.compareTo(pr2));
+		prs.items = sorteablePrs.map(pr => pr.pullRequest);
 
 		cache.set(PRType.ImprovePR, prs);
 
