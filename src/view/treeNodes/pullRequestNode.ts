@@ -20,6 +20,7 @@ import { getIconForeground, getListErrorForeground, getListWarningForeground, ge
 import { DirectoryTreeNode } from './directoryTreeNode';
 import { InMemFileChangeNode, RemoteFileChangeNode } from './fileChangeNode';
 import { TreeNode, TreeNodeParent } from './treeNode';
+import { isSorteablePR } from '../../improvedPullRequest/sorteablePullRequests';
 
 export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 {
 	static ID = 'PRNode';
@@ -297,7 +298,11 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		const currentBranchIsForThisPR = this.pullRequestModel.equals(this._folderReposManager.activePullRequest);
 
 		const { title, number, author, isDraft, html_url } = this.pullRequestModel;
-		const labelTitle = this.pullRequestModel.title.length > 50 ? `${this.pullRequestModel.title.substring(0, 50)}...` : this.pullRequestModel.title;
+
+		const sizeCategoryPrefix = isSorteablePR(this.pullRequestModel) ? `${this.pullRequestModel.prSizeCategory} - ` : '';
+		const prefixedTitle = `${sizeCategoryPrefix}${this.pullRequestModel.title}`;
+
+		const labelTitle = this.pullRequestModel.title.length > 50 ? `${prefixedTitle.substring(0, 50)}...` : prefixedTitle;
 		const login = author.specialDisplayName ?? author.login;
 
 		const hasNotification = this._notificationProvider.hasNotification(this.pullRequestModel);

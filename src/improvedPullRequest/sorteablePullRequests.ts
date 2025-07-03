@@ -1,41 +1,94 @@
 import { PullRequestModel } from '../github/pullRequestModel';
-import { SmellScoreCalculator } from './smellScoreCalculator';
 
 export class SorteablePullRequests {
-	private _sorteablePRs : SorteablePullRequest[] = [];
+	private _sorteablePRs: SorteablePullRequestType[] = [];
 
 	constructor(prs: PullRequestModel[]) {
-		this._sorteablePRs = prs.map(pr => new SorteablePullRequest(pr));
+		this._sorteablePRs = prs.map((pr) => makeSorteablePullRequest(pr));
 	}
 
 	public async getSortedPullRequests(): Promise<PullRequestModel[]> {
-		await Promise.all(this._sorteablePRs.map(pr => pr.calculateSmellScore()));
-		this._sorteablePRs.sort((pr1,pr2) => pr1.compareTo(pr2));
-		return this._sorteablePRs.map(pr => pr.pullRequest);
+		await Promise.all(
+			this._sorteablePRs.map((pr) => pr.retrievePrSize())
+		);
+		this._sorteablePRs.sort((pr1, pr2) => pr1.compareTo(pr2));
+		return this._sorteablePRs;
 	}
 }
 
-class SorteablePullRequest {
-	private _pullRequest: PullRequestModel;
-	private _smellScore: number;
-	private _smellCalculator: SmellScoreCalculator;
+enum PrSizeCategory {
+	A = 'A',
+	B = 'B',
+	C = 'C',
+	D = 'D',
+	E = 'E',
+}
 
-	constructor (pullRequest: PullRequestModel) {
-		this._pullRequest = pullRequest;
-		this._smellCalculator = new SmellScoreCalculator();
+type SorteablePullRequestType = PullRequestModel & {
+	retrievePrSize(): Promise<void>;
+	compareTo(other: any): number;
+	prSize: number;
+	prSizeCategory: PrSizeCategory;
+};
+
+export function isSorteablePR(obj: any): obj is SorteablePullRequestType {
+	return (
+		typeof obj?.retrievePrSize === 'function' &&
+		typeof obj?.prSizeCategory !== 'undefined'
+	);
+}
+
+function makeSorteablePullRequest(
+	pr: PullRequestModel
+): SorteablePullRequestType {
+	class SorteableImpl {
+		private _prSize: number = 0;
+		private _prSizeCategory: PrSizeCategory;
+
+		async retrievePrSize() {
+			await pr.getFileChangesInfo();
+			this._prSize = pr.totalNumberOfChanges;
+			this.addSizeCategory();
+		}
+
+		private addSizeCategory() {
+			const size = this._prSize;
+			if (size < 10) this._prSizeCategory = PrSizeCategory.A;
+			else if (size < 50) this._prSizeCategory = PrSizeCategory.B;
+			else if (size < 200) this._prSizeCategory = PrSizeCategory.C;
+			else if (size < 500) this._prSizeCategory = PrSizeCategory.D;
+			else this._prSizeCategory = PrSizeCategory.E;
+		}
+
+		compareTo(other: any): number {
+			return this._prSize - other._prSize;
+		}
+
+		get prSize() {
+			return this._prSize;
+		}
+
+		get prSizeCategory() {
+			return this._prSizeCategory;
+		}
 	}
 
-	public get pullRequest(): PullRequestModel {
-		return this._pullRequest;
-	}
+	const decorator = new SorteableImpl();
 
-	public compareTo(otherSPr: SorteablePullRequest): number {
-		return this._smellScore - otherSPr._smellScore;
-	}
-
-	public async calculateSmellScore(): Promise<void> {
-		await this._pullRequest.getFileChangesInfo();
-		this._smellScore = this._pullRequest.totalNumberOfChanges;
-		// this._smellScore = this._smellCalculator.calculate();
-	}
+	return new Proxy(pr as SorteablePullRequestType, {
+		get(target, prop, receiver) {
+			if (prop in decorator) return (decorator as any)[prop];
+			return Reflect.get(target, prop, receiver);
+		},
+		set(target, prop, value, receiver) {
+			if (prop in decorator) {
+				(decorator as any)[prop] = value;
+				return true;
+			}
+			return Reflect.set(target, prop, value, receiver);
+		},
+		has(target, prop) {
+			return prop in decorator || prop in target;
+		},
+	});
 }
