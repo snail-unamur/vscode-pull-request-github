@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CommentEvent, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
+import { PullRequestSizeCategory } from '../improvedPullRequest/pullRequestSizeCategory';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -98,6 +99,7 @@ export interface PullRequest extends Issue {
 	lastReviewType?: ReviewType;
 	revertable?: boolean;
 	busy?: boolean;
+	pullRequestSize: PullRequestSizeCategory;
 }
 
 export interface ProjectItemsReply {

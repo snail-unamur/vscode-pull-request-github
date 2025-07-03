@@ -37,6 +37,8 @@ import { PullRequestView } from './pullRequestOverviewCommon';
 import { pickEmail, reviewersQuickPick } from './quickPicks';
 import { parseReviewers } from './utils';
 import { CancelCodingAgentReply, MergeArguments, MergeResult, PullRequest, ReviewType, SubmitReviewReply } from './views';
+import { PullRequestSizeCategory } from '../improvedPullRequest/pullRequestSizeCategory';
+import { isSorteablePR } from '../improvedPullRequest/sorteablePullRequests';
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
@@ -294,7 +296,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				isIssue: false,
 				emailForCommit,
 				currentUserReviewState: reviewState,
-				revertable: pullRequest.state === GithubItemStateEnum.Merged
+				revertable: pullRequest.state === GithubItemStateEnum.Merged,
+				pullRequestSize: isSorteablePR(pullRequest) ? pullRequest.prSizeCategory : PullRequestSizeCategory.E, // DO NOT WORK
 			};
 			this._postMessage({
 				command: 'pr.initialize',

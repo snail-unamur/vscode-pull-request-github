@@ -586,6 +586,26 @@ body button .icon {
 	background-color: var(--vscode-pullRequests-draft);
 }
 
+.size-badge-a {
+	background-color: var(--vscode-pullRequests-sizeA);
+}
+
+.size-badge-b {
+	background-color: var(--vscode-pullRequests-sizeB);
+}
+
+.size-badge-c {
+	background-color: var(--vscode-pullRequests-sizeC);
+}
+
+.size-badge-d {
+	background-color: var(--vscode-pullRequests-sizeD);
+}
+
+.size-badge-e {
+	background-color: var(--vscode-pullRequests-sizeE);
+}
+
 .section {
 	padding-bottom: 24px;
 	border-bottom: 1px solid var(--vscode-editorWidget-border);

@@ -3347,6 +3347,56 @@
 					"highContrastLight": "editor.foreground"
 				},
 				"description": "The color used for indicating a notification on a pull request"
+			},
+			{
+				"id": "pullRequests.sizeA",
+				"defaults": {
+					"dark": "issues.open",
+					"light": "issues.open",
+					"highContrast": "editor.background",
+					"highContrastLight": "editor.background"
+				},
+				"description": "The color used for indicating that a pul request has a size of category A."
+			},
+			{
+				"id": "pullRequests.sizeB",
+				"defaults": {
+					"dark": "#FFFF00",
+					"light": "#FFFF00",
+					"highContrast": "editor.background",
+					"highContrastLight": "editor.background"
+				},
+				"description": "The color used for indicating that a pul request has a size of category B."
+			},
+			{
+				"id": "pullRequests.sizeC",
+				"defaults": {
+					"dark": "#FF8000",
+					"light": "#FF8000",
+					"highContrast": "editor.background",
+					"highContrastLight": "editor.background"
+				},
+				"description": "The color used for indicating that a pul request has a size of category C."
+			},
+			{
+				"id": "pullRequests.sizeD",
+				"defaults": {
+					"dark": "issues.closed",
+					"light": "issues.closed",
+					"highContrast": "editor.background",
+					"highContrastLight": "editor.background"
+				},
+				"description": "The color used for indicating that a pul request has a size of category D."
+			},
+			{
+				"id": "pullRequests.sizeE",
+				"defaults": {
+					"dark": "pullRequests.merged",
+					"light": "pullRequests.merged",
+					"highContrast": "editor.background",
+					"highContrastLight": "editor.background"
+				},
+				"description": "The color used for indicating that a pul request has a size of category E."
 			}
 		],
 		"resourceLabelFormatters": [

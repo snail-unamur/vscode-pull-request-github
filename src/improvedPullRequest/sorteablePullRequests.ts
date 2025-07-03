@@ -1,4 +1,5 @@
 import { PullRequestModel } from '../github/pullRequestModel';
+import { PullRequestSizeCategory } from './pullRequestSizeCategory';
 
 export class SorteablePullRequests {
 	private _sorteablePRs: SorteablePullRequestType[] = [];
@@ -16,19 +17,12 @@ export class SorteablePullRequests {
 	}
 }
 
-enum PrSizeCategory {
-	A = 'A',
-	B = 'B',
-	C = 'C',
-	D = 'D',
-	E = 'E',
-}
 
 type SorteablePullRequestType = PullRequestModel & {
 	retrievePrSize(): Promise<void>;
 	compareTo(other: any): number;
 	prSize: number;
-	prSizeCategory: PrSizeCategory;
+	prSizeCategory: PullRequestSizeCategory;
 };
 
 export function isSorteablePR(obj: any): obj is SorteablePullRequestType {
@@ -43,7 +37,7 @@ function makeSorteablePullRequest(
 ): SorteablePullRequestType {
 	class SorteableImpl {
 		private _prSize: number = 0;
-		private _prSizeCategory: PrSizeCategory;
+		private _prSizeCategory: PullRequestSizeCategory;
 
 		async retrievePrSize() {
 			await pr.getFileChangesInfo();
@@ -53,11 +47,11 @@ function makeSorteablePullRequest(
 
 		private addSizeCategory() {
 			const size = this._prSize;
-			if (size < 10) this._prSizeCategory = PrSizeCategory.A;
-			else if (size < 50) this._prSizeCategory = PrSizeCategory.B;
-			else if (size < 200) this._prSizeCategory = PrSizeCategory.C;
-			else if (size < 500) this._prSizeCategory = PrSizeCategory.D;
-			else this._prSizeCategory = PrSizeCategory.E;
+			if (size < 10) this._prSizeCategory = PullRequestSizeCategory.A;
+			else if (size < 50) this._prSizeCategory = PullRequestSizeCategory.B;
+			else if (size < 200) this._prSizeCategory = PullRequestSizeCategory.C;
+			else if (size < 500) this._prSizeCategory = PullRequestSizeCategory.D;
+			else this._prSizeCategory = PullRequestSizeCategory.E;
 		}
 
 		compareTo(other: any): number {

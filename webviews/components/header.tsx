@@ -13,6 +13,7 @@ import { useStateProp } from '../common/hooks';
 import { checkIcon, issueClosedIcon, issueIcon, mergeIcon, prClosedIcon, prDraftIcon, prOpenIcon } from './icon';
 import { nbsp } from './space';
 import { AuthorLink, Avatar } from './user';
+import { PullRequestSizeCategory } from '../../src/improvedPullRequest/pullRequestSizeCategory'
 
 export function Header({
 	canEdit,
@@ -28,7 +29,8 @@ export function Header({
 	isDraft,
 	isIssue,
 	repositoryDefaultBranch,
-	events
+	events,
+	pullRequestSize
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
 	const [inEditMode, setEditMode] = useState(false);
@@ -44,7 +46,7 @@ export function Header({
 				setEditMode={setEditMode}
 				setCurrentTitle={setCurrentTitle}
 			/>
-			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} />
+			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} pullRequestSize={pullRequestSize} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -171,14 +173,18 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 		: null;
 }
 
-function Subtitle({ state, isDraft, isIssue, author, base, head }) {
+function Subtitle({ state, isDraft, isIssue, author, base, head, pullRequestSize }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue);
+	const { sizeText, sizeColor } = getPullRequestSize(pullRequestSize);
 
 	return (
 		<div className="subtitle">
 			<div id="status" className={`status-badge-${color}`}>
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
+			</div>
+			<div id="status" className={`size-badge-${sizeColor}`}>
+				<span>{sizeText}</span>
 			</div>
 			<div className="author">
 				{<Avatar for={author} />}
@@ -265,5 +271,20 @@ function getActionText(state: GithubItemStateEnum) {
 		return 'merged changes';
 	} else {
 		return 'wants to merge changes';
+	}
+}
+
+export function getPullRequestSize(size: PullRequestSizeCategory) {
+	switch (size) {
+		case PullRequestSizeCategory.A :
+			return { sizeText: PullRequestSizeCategory.A, sizeColor: 'a'};
+		case PullRequestSizeCategory.B :
+			return { sizeText: PullRequestSizeCategory.B, sizeColor: 'b'};
+		case PullRequestSizeCategory.C :
+			return { sizeText: PullRequestSizeCategory.C, sizeColor: 'c'};
+		case PullRequestSizeCategory.D :
+			return { sizeText: PullRequestSizeCategory.D, sizeColor: 'd'};
+		case PullRequestSizeCategory.E :
+			return { sizeText: PullRequestSizeCategory.E, sizeColor: 'e'};
 	}
 }
