@@ -54,7 +54,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 	private readonly _stateModel: CopilotStateModel;
 	private readonly _onDidChangeStates = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeStates = this._onDidChangeStates.event;
-	private readonly _onDidChangeNotifications = this._register(new vscode.EventEmitter<void>());
+	private readonly _onDidChangeNotifications = this._register(new vscode.EventEmitter<PullRequestModel[]>());
 	readonly onDidChangeNotifications = this._onDidChangeNotifications.event;
 	private readonly _onDidCreatePullRequest = this._register(new vscode.EventEmitter<number>());
 	readonly onDidCreatePullRequest = this._onDidCreatePullRequest.event;
@@ -70,7 +70,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 		this._stateModel = new CopilotStateModel();
 		this._register(new CopilotPRWatcher(this.repositoriesManager, this._stateModel));
 		this._register(this._stateModel.onDidChangeStates(() => this._onDidChangeStates.fire()));
-		this._register(this._stateModel.onDidChangeNotifications(() => this._onDidChangeNotifications.fire()));
+		this._register(this._stateModel.onDidChangeNotifications(items => this._onDidChangeNotifications.fire(items)));
 
 		this._register(this.repositoriesManager.onDidChangeFolderRepositories((event) => {
 			if (event.added) {
@@ -265,7 +265,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 			return;
 		}
 
-		const { userPrompt, summary, source, followup } = args;
+		const { userPrompt, summary, source } = args;
 		if (!userPrompt || userPrompt.trim().length === 0) {
 			return;
 		}
@@ -276,14 +276,6 @@ export class CopilotRemoteAgentManager extends Disposable {
 		}
 		const { repository, owner, repo } = repoInfo;
 
-		// If this is a followup, parse out the necessary data
-		// Group 2 is this, url-encoded:
-		// {"owner":"monalisa","repo":"app","pullRequestNumber":18}
-		let followUpPR: number | undefined = this.parseFollowup(followup, repoInfo);
-		if (followUpPR) {
-			return this.addFollowUpToExistingPR(followUpPR, userPrompt, summary);
-		}
-
 		const repoName = `${owner}/${repo}`;
 		const hasChanges = repository.state.workingTreeChanges.length > 0 || repository.state.indexChanges.length > 0;
 		const learnMoreCb = async () => {
@@ -291,13 +283,15 @@ export class CopilotRemoteAgentManager extends Disposable {
 		};
 
 		let autoPushAndCommit = false;
-		const message = vscode.l10n.t('Copilot coding agent will continue your work in \'{0}\'', repoName);
+		const message = vscode.l10n.t('Copilot coding agent will continue your work in \'{0}\'.', repoName);
+		const detail = vscode.l10n.t('Your current chat session will end, and its context will be used to continue your work in a new pull request.');
 		if (source !== 'prompt' && hasChanges && this.autoCommitAndPushEnabled()) {
+			// Pending changes modal
 			const modalResult = await vscode.window.showInformationMessage(
 				message,
 				{
 					modal: true,
-					detail: vscode.l10n.t('Local changes detected'),
+					detail,
 				},
 				PUSH_CHANGES,
 				CONTINUE_WITHOUT_PUSHING,
@@ -317,10 +311,12 @@ export class CopilotRemoteAgentManager extends Disposable {
 				autoPushAndCommit = true;
 			}
 		} else {
+			// No pending changes modal
 			const modalResult = await vscode.window.showInformationMessage(
-				(source !== 'prompt' ? message : vscode.l10n.t('Copilot coding agent will implement the specification outlined in this prompt file')),
+				source !== 'prompt' ? message : vscode.l10n.t('Copilot coding agent will implement the specification outlined in this prompt file'),
 				{
 					modal: true,
+					detail: source !== 'prompt' ? detail : undefined
 				},
 				CONTINUE,
 				LEARN_MORE,
@@ -347,16 +343,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 		}
 
 		const { webviewUri, link, number } = result;
-
-		if (source === 'prompt') {
-			const VIEW = vscode.l10n.t('View');
-			const finished = vscode.l10n.t('Coding agent has begun work on your prompt in #{0}', number);
-			vscode.window.showInformationMessage(finished, VIEW).then((value) => {
-				if (value === VIEW) {
-					vscode.commands.executeCommand('vscode.open', webviewUri);
-				}
-			});
-		}
+		vscode.commands.executeCommand('vscode.open', webviewUri);
 
 		// allow-any-unicode-next-line
 		return vscode.l10n.t('🚀 Coding agent will continue work in [#{0}]({1}).  Track progress [here]({2}).', number, link, webviewUri.toString());
@@ -627,7 +614,12 @@ export class CopilotRemoteAgentManager extends Disposable {
 		this._stateModel.clearNotifications();
 	}
 
-	get notifications(): ReadonlySet<string> {
-		return this._stateModel.notifications;
+	get notificationsCount(): number {
+		return this._stateModel.notifications.size;
+	}
+
+	hasNotification(owner: string, repo: string, pullRequestNumber: number): boolean {
+		const key = this._stateModel.makeKey(owner, repo, pullRequestNumber);
+		return this._stateModel.notifications.has(key);
 	}
 }
