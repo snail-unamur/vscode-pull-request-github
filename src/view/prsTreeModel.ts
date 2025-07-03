@@ -15,7 +15,7 @@ import { RepositoriesManager } from '../github/repositoriesManager';
 import { UnsatisfiedChecks } from '../github/utils';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
-import { SorteablePullRequest } from '../improvedPullRequest/sorteablePullRequest';
+import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
 
 export const EXPANDED_QUERIES_STATE = 'expandedQueries';
 
@@ -270,10 +270,16 @@ export class PrsTreeModel extends Disposable {
 			{ fetchNextPage }
 		);
 
-		const sorteablePrs = prs.items.map(pr => new SorteablePullRequest(pr)).sort((pr1, pr2) => pr1.compareTo(pr2));
-		prs.items = sorteablePrs.map(pr => pr.pullRequest);
+		const sorteablePullRequests = new SorteablePullRequests(prs.items);
+		const sortedPrs = await sorteablePullRequests.getSortedPullRequests();
+		const newItemResponse = {
+			items: sortedPrs,
+			hasMorePages: prs.hasMorePages,
+			hasUnsearchedRepositories: prs.hasUnsearchedRepositories,
+			totalCount: prs.totalCount
+		};
 
-		cache.set(PRType.ImprovePR, prs);
+		cache.set(PRType.ImprovePR, newItemResponse);
 
 		/* __GDPR__
 			"pr.expand.all" : {}
