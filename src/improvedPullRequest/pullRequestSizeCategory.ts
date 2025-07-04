@@ -1,7 +1,7 @@
 export enum PullRequestSizeCategory {
-	A = 'A',
-	B = 'B',
-	C = 'C',
-	D = 'D',
-	E = 'E',
+	A = 'XS',
+	B = 'S',
+	C = 'M',
+	D = 'L',
+	E = 'XL',
 }

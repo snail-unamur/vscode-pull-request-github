@@ -1,5 +1,7 @@
+import { PR_SETTINGS_NAMESPACE, PULL_REQUEST_SIZE_A, PULL_REQUEST_SIZE_B, PULL_REQUEST_SIZE_C, PULL_REQUEST_SIZE_D } from '../common/settingKeys';
 import { PullRequestModel } from '../github/pullRequestModel';
 import { PullRequestSizeCategory } from './pullRequestSizeCategory';
+import * as vscode from 'vscode';
 
 export class SorteablePullRequests {
 	private _sorteablePRs: SorteablePullRequestType[] = [];
@@ -46,11 +48,19 @@ function makeSorteablePullRequest(
 		}
 
 		private addSizeCategory() {
+			const config = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE);
+
+			const thresholdA = config.get<number>(PULL_REQUEST_SIZE_A)!;
+			const thresholdB = config.get<number>(PULL_REQUEST_SIZE_B)!;
+			const thresholdC = config.get<number>(PULL_REQUEST_SIZE_C)!;
+			const thresholdD = config.get<number>(PULL_REQUEST_SIZE_D)!;
+
 			const size = this._prSize;
-			if (size < 10) this._prSizeCategory = PullRequestSizeCategory.A;
-			else if (size < 50) this._prSizeCategory = PullRequestSizeCategory.B;
-			else if (size < 200) this._prSizeCategory = PullRequestSizeCategory.C;
-			else if (size < 500) this._prSizeCategory = PullRequestSizeCategory.D;
+
+			if (size < thresholdA) this._prSizeCategory = PullRequestSizeCategory.A;
+			else if (size < thresholdB) this._prSizeCategory = PullRequestSizeCategory.B;
+			else if (size < thresholdC) this._prSizeCategory = PullRequestSizeCategory.C;
+			else if (size < thresholdD) this._prSizeCategory = PullRequestSizeCategory.D;
 			else this._prSizeCategory = PullRequestSizeCategory.E;
 		}
 

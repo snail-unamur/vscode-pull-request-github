@@ -88,6 +88,26 @@
 			"type": "object",
 			"title": "GitHub Pull Requests",
 			"properties": {
+				"githubPullRequests.size.a": {
+					"type": "number",
+					"default": 10,
+					"description": "Threshold of a pull request of size A."
+				},
+				"githubPullRequests.size.b": {
+					"type": "number",
+					"default": 50,
+					"description": "Threshold of a pull request of size B."
+				},
+				"githubPullRequests.size.c": {
+					"type": "number",
+					"default": 200,
+					"description": "Threshold of a pull request of size C."
+				},
+				"githubPullRequests.size.d": {
+					"type": "number",
+					"default": 500,
+					"description": "Threshold of a pull request of size D."
+				},
 				"githubPullRequests.pullRequestTitle": {
 					"deprecationMessage": "The pull request title now uses the same defaults as GitHub, and can be edited before create.",
 					"type": "string",
