@@ -13,9 +13,9 @@ import { CheckState, PRType, PullRequestChecks, PullRequestReviewRequirement } f
 import { PullRequestModel } from '../github/pullRequestModel';
 import { RepositoriesManager } from '../github/repositoriesManager';
 import { UnsatisfiedChecks } from '../github/utils';
+import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
-import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
 
 export const EXPANDED_QUERIES_STATE = 'expandedQueries';
 

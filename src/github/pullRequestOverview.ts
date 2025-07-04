@@ -16,6 +16,7 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
+import { measurablePullRequest } from '../improvedPullRequest/measureablePullRequest';
 import { SessionLogViewManager } from '../view/sessionLogView';
 import { getCopilotApi } from './copilotApi';
 import { FolderRepositoryManager } from './folderRepositoryManager';
@@ -37,8 +38,6 @@ import { PullRequestView } from './pullRequestOverviewCommon';
 import { pickEmail, reviewersQuickPick } from './quickPicks';
 import { parseReviewers } from './utils';
 import { CancelCodingAgentReply, MergeArguments, MergeResult, PullRequest, ReviewType, SubmitReviewReply } from './views';
-import { PullRequestSizeCategory } from '../improvedPullRequest/pullRequestSizeCategory';
-import { isSorteablePR } from '../improvedPullRequest/sorteablePullRequests';
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
@@ -209,7 +208,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 	protected override async updateItem(pullRequestModel: PullRequestModel): Promise<void> {
 		try {
 			const [
-				pullRequest,
+				pullRequestRef,
 				timelineEvents,
 				defaultBranch,
 				status,
@@ -245,11 +244,14 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				this._folderRepositoryManager.getPreferredEmail(pullRequestModel),
 				pullRequestModel.getCoAuthors()
 			]);
-			if (!pullRequest) {
+			if (!pullRequestRef) {
 				throw new Error(
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
 			}
+
+			const pullRequest = measurablePullRequest(pullRequestRef);
+			await pullRequest.retrievePrSize();
 
 			this._item = pullRequest;
 			this.registerPrListeners();
@@ -297,7 +299,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				emailForCommit,
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
-				pullRequestSize: isSorteablePR(pullRequest) ? pullRequest.prSizeCategory : PullRequestSizeCategory.E, // DO NOT WORK
+				pullRequestSize: pullRequest.prSizeCategory,
 			};
 			this._postMessage({
 				command: 'pr.initialize',
