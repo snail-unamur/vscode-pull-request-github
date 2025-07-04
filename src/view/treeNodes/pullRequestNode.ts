@@ -63,6 +63,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		this._register(this._folderReposManager.themeWatcher.onDidChangeTheme(() => {
 			this.refresh(this);
 		}));
+		this.resolvePRCommentController();
 	}
 
 	// #region Tree
