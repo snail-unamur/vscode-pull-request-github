@@ -5,7 +5,9 @@
 
 
 import * as vscode from 'vscode';
+import { ITelemetry } from '../../common/telemetry';
 import { CopilotRemoteAgentManager } from '../../github/copilotRemoteAgent';
+import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 
 export interface CopilotRemoteAgentToolParameters {
 	// The LLM is inconsistent in providing repo information.
@@ -22,7 +24,7 @@ export interface CopilotRemoteAgentToolParameters {
 export class CopilotRemoteAgentTool implements vscode.LanguageModelTool<CopilotRemoteAgentToolParameters> {
 	public static readonly toolId = 'github-pull-request_copilot-coding-agent';
 
-	constructor(private manager: CopilotRemoteAgentManager) { }
+	constructor(private manager: CopilotRemoteAgentManager, private telemetry: ITelemetry) { }
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<CopilotRemoteAgentToolParameters>): Promise<vscode.PreparedToolInvocation> {
 		const { title, existingPullRequest } = options.input;
@@ -35,12 +37,19 @@ export class CopilotRemoteAgentTool implements vscode.LanguageModelTool<CopilotR
 
 		const targetRepo = await this.manager.repoInfo();
 		const autoPushEnabled = this.manager.autoCommitAndPushEnabled();
+		const openPR = existingPullRequest || await this.getActivePullRequestWithSession(targetRepo);
+
+		/* __GDPR__
+			"remoteAgent.tool.prepare" : {}
+		*/
+		this.telemetry.sendTelemetryEvent('copilot.remoteAgent.tool.prepare', {});
+
 		return {
 			pastTenseMessage: vscode.l10n.t('Launched coding agent'),
 			invocationMessage: vscode.l10n.t('Launching coding agent'),
 			confirmationMessages: {
-				message: existingPullRequest
-					? vscode.l10n.t('The coding agent will incorporate your feedback on existing pull request **#{0}**.', existingPullRequest)
+				message: openPR
+					? vscode.l10n.t('The coding agent will incorporate your feedback on existing pull request **#{0}**.', openPR)
 					: (targetRepo && autoPushEnabled
 						? vscode.l10n.t('The coding agent will continue work on "**{0}**" in a new branch on "**{1}/{2}**". Any uncommitted changes will be **automatically pushed**.', title, targetRepo.owner, targetRepo.repo)
 						: vscode.l10n.t('The coding agent will start working on "**{0}**"', title)),
@@ -63,13 +72,30 @@ export class CopilotRemoteAgentTool implements vscode.LanguageModelTool<CopilotR
 			]);
 		}
 
+		let pullRequestNumber: number | undefined;
 		if (existingPullRequest) {
-			const pullRequestNumber = parseInt(existingPullRequest, 10);
+			pullRequestNumber = parseInt(existingPullRequest, 10);
 			if (isNaN(pullRequestNumber)) {
 				return new vscode.LanguageModelToolResult([
 					new vscode.LanguageModelTextPart(vscode.l10n.t('Invalid pull request number: {0}', existingPullRequest))
 				]);
 			}
+		} else {
+			pullRequestNumber = await this.getActivePullRequestWithSession(targetRepo);
+		}
+
+		/* __GDPR__
+			"remoteAgent.tool.invoke" : {
+				"hasExistingPR" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
+				"hasBody" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+			},
+		*/
+		this.telemetry.sendTelemetryEvent('copilot.remoteAgent.tool.invoke', {
+			hasExistingPR: pullRequestNumber ? 'true' : 'false',
+			hasBody: body ? 'true' : 'false'
+		});
+
+		if (pullRequestNumber) {
 			await this.manager.addFollowUpToExistingPR(pullRequestNumber, title, body);
 			return new vscode.LanguageModelToolResult([
 				new vscode.LanguageModelTextPart(vscode.l10n.t('Follow-up added to pull request #{0}.', pullRequestNumber)),
@@ -78,10 +104,26 @@ export class CopilotRemoteAgentTool implements vscode.LanguageModelTool<CopilotR
 
 		const result = await this.manager.invokeRemoteAgent(title, body);
 		if (result.state === 'error') {
+			/* __GDPR__
+				"remoteAgent.tool.invoke" : {
+					"reason" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+				}
+			*/
+			this.telemetry.sendTelemetryErrorEvent('copilot.remoteAgent.tool.error', { reason: 'invocationError' });
 			throw new Error(result.error);
 		}
 		return new vscode.LanguageModelToolResult([
 			new vscode.LanguageModelTextPart(result.llmDetails)
 		]);
+	}
+
+	private async getActivePullRequestWithSession(repoInfo: { repo: string; owner: string; fm: FolderRepositoryManager } | undefined): Promise<number | undefined> {
+		if (!repoInfo) {
+			return;
+		}
+		const activePR = repoInfo.fm.activePullRequest;
+		if (activePR && this.manager.getStateForPR(repoInfo.owner, repoInfo.repo, activePR.number)) {
+			return activePR.number;
+		}
 	}
 }

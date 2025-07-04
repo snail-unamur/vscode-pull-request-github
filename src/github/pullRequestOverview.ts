@@ -380,7 +380,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			case 'pr.update-branch':
 				return this.updateBranch(message);
 			case 'pr.gotoChangesSinceReview':
-				return this.gotoChangesSinceReview();
+				return this.gotoChangesSinceReview(message);
 			case 'pr.re-request-review':
 				return this.reRequestReview(message);
 			case 'pr.revert':
@@ -392,8 +392,9 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		}
 	}
 
-	private gotoChangesSinceReview() {
+	private gotoChangesSinceReview(message: IRequestMessage<void>): Promise<void> {
 		this._item.showChangesSinceReview = true;
+		return this._replyMessage(message, {});
 	}
 
 	private async changeReviewers(message: IRequestMessage<void>): Promise<void> {
@@ -499,7 +500,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			if (message.args.event !== EventType.CopilotStarted) {
 				return this._replyMessage(message, { success: false, error: 'Invalid event type' });
 			} else {
-				const copilotApi = await getCopilotApi(this._folderRepositoryManager.credentialStore, this._item.remote.authProviderId);
+				const copilotApi = await getCopilotApi(this._folderRepositoryManager.credentialStore, this._telemetry, this._item.remote.authProviderId);
 				if (copilotApi) {
 					const session = (await copilotApi.getAllSessions(this._item.id))[0];
 					if (session.state !== 'completed') {
