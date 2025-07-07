@@ -42,7 +42,7 @@ export function measurablePullRequest(
 			const repoName = pr.remote.repositoryName;
 			const prNumber = pr.number;
 
-			const apiUrl = `http://localhost:6002/api/repositories/${repoName}/pullRequests/${prNumber}`;
+			const apiUrl = `http://localhost:5000/api/${repoName}/pullRequest/${prNumber}`;
 
 			try {
 				const result = await (await fetch(apiUrl)).json();
