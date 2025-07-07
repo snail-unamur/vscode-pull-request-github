@@ -92,7 +92,7 @@ export const CODING_AGENT_ENABLED = 'enabled';
 export const CODING_AGENT_AUTO_COMMIT_AND_PUSH = 'autoCommitAndPush';
 
 // Pull Request Improved
-export const PULL_REQUEST_SIZE_A = 'size.a';
-export const PULL_REQUEST_SIZE_B = 'size.b';
-export const PULL_REQUEST_SIZE_C = 'size.c';
-export const PULL_REQUEST_SIZE_D = 'size.d';
+export const PULL_REQUEST_RISK_A = 'risk.a';
+export const PULL_REQUEST_RISK_B = 'risk.b';
+export const PULL_REQUEST_RISK_C = 'risk.c';
+export const PULL_REQUEST_RISK_D = 'risk.d';

@@ -1,63 +1,77 @@
 import * as vscode from 'vscode';
-import { PR_SETTINGS_NAMESPACE, PULL_REQUEST_SIZE_A, PULL_REQUEST_SIZE_B, PULL_REQUEST_SIZE_C, PULL_REQUEST_SIZE_D } from '../common/settingKeys';
+import Logger from '../common/logger';
+import { PR_SETTINGS_NAMESPACE, PULL_REQUEST_RISK_A, PULL_REQUEST_RISK_B, PULL_REQUEST_RISK_C, PULL_REQUEST_RISK_D } from '../common/settingKeys';
+import { formatError } from '../common/utils';
 import { PullRequestModel } from '../github/pullRequestModel';
-import { PullRequestSizeCategory } from './pullRequestSizeCategory';
+import { PullRequestRiskCategory } from './pullRequestRiskCategory';
 
 export function isMeasurablePullRequest(obj: any): obj is MeasurablePullRequestType {
 	return (
-		typeof obj?.retrievePrSize === 'function' &&
-		typeof obj?.prSizeCategory !== 'undefined'
+		typeof obj?.retrieveRiskScore === 'function' &&
+		typeof obj?.riskCategory !== 'undefined'
 	);
 }
 
 export type MeasurablePullRequestType = PullRequestModel & {
-	retrievePrSize(): Promise<void>;
+	retrieveRiskScore(): Promise<void>;
 	compareTo(other: any): number;
-	prSize: number;
-	prSizeCategory: PullRequestSizeCategory;
+	risk: number;
+	riskCategory: PullRequestRiskCategory;
 };
 
 export function measurablePullRequest(
 	pr: PullRequestModel
 ): MeasurablePullRequestType {
 	class SorteableImpl {
-		private _prSize: number = 0;
-		private _prSizeCategory: PullRequestSizeCategory;
+		private _riskScore: number;
+		private _riskCategory: PullRequestRiskCategory;
 
-		async retrievePrSize() {
-			await pr.getFileChangesInfo();
-			this._prSize = pr.totalNumberOfChanges;
-			this.addSizeCategory();
+		get risk() {
+			return this._riskScore;
+		}
+
+		get riskCategory() {
+			return this._riskCategory;
+		}
+
+		compareTo(other: any): number {
+			return this._riskScore - other._riskScore;
+		}
+
+		async retrieveRiskScore() {
+			const repoId = pr.id;
+			const prNumber = pr.number;
+
+			const apiUrl = `http://localhost:6002/api/repositories/${repoId}/pullRequests/${prNumber}`;
+
+			try {
+				const result = await (await fetch(apiUrl)).json();
+
+				Logger.debug('Pull Request risk information retrieved.', repoId.toString());
+
+				this._riskScore = result.analysis.risk_score.score;
+				this.addSizeCategory();
+			} catch (error) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Failed to retreive risk informations: {0}', formatError(error)));
+			}
 		}
 
 		private addSizeCategory() {
 			// What about perf, what are the impact of retreiving the setting?
 			const config = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE);
 
-			const thresholdA = config.get<number>(PULL_REQUEST_SIZE_A)!;
-			const thresholdB = config.get<number>(PULL_REQUEST_SIZE_B)!;
-			const thresholdC = config.get<number>(PULL_REQUEST_SIZE_C)!;
-			const thresholdD = config.get<number>(PULL_REQUEST_SIZE_D)!;
+			const thresholdA = config.get<number>(PULL_REQUEST_RISK_A)!;
+			const thresholdB = config.get<number>(PULL_REQUEST_RISK_B)!;
+			const thresholdC = config.get<number>(PULL_REQUEST_RISK_C)!;
+			const thresholdD = config.get<number>(PULL_REQUEST_RISK_D)!;
 
-			const size = this._prSize;
+			const size = this._riskScore;
 
-			if (size < thresholdA) this._prSizeCategory = PullRequestSizeCategory.A;
-			else if (size < thresholdB) this._prSizeCategory = PullRequestSizeCategory.B;
-			else if (size < thresholdC) this._prSizeCategory = PullRequestSizeCategory.C;
-			else if (size < thresholdD) this._prSizeCategory = PullRequestSizeCategory.D;
-			else this._prSizeCategory = PullRequestSizeCategory.E;
-		}
-
-		compareTo(other: any): number {
-			return this._prSize - other._prSize;
-		}
-
-		get prSize() {
-			return this._prSize;
-		}
-
-		get prSizeCategory() {
-			return this._prSizeCategory;
+			if (size < thresholdA) this._riskCategory = PullRequestRiskCategory.A;
+			else if (size < thresholdB) this._riskCategory = PullRequestRiskCategory.B;
+			else if (size < thresholdC) this._riskCategory = PullRequestRiskCategory.C;
+			else if (size < thresholdD) this._riskCategory = PullRequestRiskCategory.D;
+			else this._riskCategory = PullRequestRiskCategory.E;
 		}
 	}
 

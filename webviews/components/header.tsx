@@ -13,7 +13,7 @@ import { useStateProp } from '../common/hooks';
 import { checkIcon, issueClosedIcon, issueIcon, mergeIcon, prClosedIcon, prDraftIcon, prOpenIcon } from './icon';
 import { nbsp } from './space';
 import { AuthorLink, Avatar } from './user';
-import { PullRequestSizeCategory } from '../../src/improvedPullRequest/pullRequestSizeCategory'
+import { PullRequestRiskCategory } from '../../src/improvedPullRequest/pullRequestRiskCategory'
 
 export function Header({
 	canEdit,
@@ -30,7 +30,7 @@ export function Header({
 	isIssue,
 	repositoryDefaultBranch,
 	events,
-	pullRequestSize
+	riskCategory
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
 	const [inEditMode, setEditMode] = useState(false);
@@ -46,7 +46,7 @@ export function Header({
 				setEditMode={setEditMode}
 				setCurrentTitle={setCurrentTitle}
 			/>
-			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} pullRequestSize={pullRequestSize} />
+			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} riskCategory={riskCategory} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -173,9 +173,9 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 		: null;
 }
 
-function Subtitle({ state, isDraft, isIssue, author, base, head, pullRequestSize }) {
+function Subtitle({ state, isDraft, isIssue, author, base, head, riskCategory }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue);
-	const { sizeText, sizeColor } = getPullRequestSize(pullRequestSize);
+	const { riskText, riskColor } = getRiskLabel(riskCategory);
 
 	return (
 		<div className="subtitle">
@@ -183,8 +183,8 @@ function Subtitle({ state, isDraft, isIssue, author, base, head, pullRequestSize
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
-			<div id="status" className={`size-badge-${sizeColor}`}>
-				<span>{sizeText}</span>
+			<div id="status" className={`size-badge-${riskColor}`}>
+				<span>Risk category {riskText}</span>
 			</div>
 			<div className="author">
 				{<Avatar for={author} />}
@@ -274,17 +274,17 @@ function getActionText(state: GithubItemStateEnum) {
 	}
 }
 
-export function getPullRequestSize(size: PullRequestSizeCategory) {
-	switch (size) {
-		case PullRequestSizeCategory.A :
-			return { sizeText: PullRequestSizeCategory.A, sizeColor: 'a'};
-		case PullRequestSizeCategory.B :
-			return { sizeText: PullRequestSizeCategory.B, sizeColor: 'b'};
-		case PullRequestSizeCategory.C :
-			return { sizeText: PullRequestSizeCategory.C, sizeColor: 'c'};
-		case PullRequestSizeCategory.D :
-			return { sizeText: PullRequestSizeCategory.D, sizeColor: 'd'};
-		case PullRequestSizeCategory.E :
-			return { sizeText: PullRequestSizeCategory.E, sizeColor: 'e'};
+export function getRiskLabel(risk: PullRequestRiskCategory) {
+	switch (risk) {
+		case PullRequestRiskCategory.A :
+			return { riskText: PullRequestRiskCategory.A, riskColor: 'a'};
+		case PullRequestRiskCategory.B :
+			return { riskText: PullRequestRiskCategory.B, riskColor: 'b'};
+		case PullRequestRiskCategory.C :
+			return { riskText: PullRequestRiskCategory.C, riskColor: 'c'};
+		case PullRequestRiskCategory.D :
+			return { riskText: PullRequestRiskCategory.D, riskColor: 'd'};
+		case PullRequestRiskCategory.E :
+			return { riskText: PullRequestRiskCategory.E, riskColor: 'e'};
 	}
 }

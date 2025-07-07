@@ -251,7 +251,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			}
 
 			const pullRequest = measurablePullRequest(pullRequestRef);
-			await pullRequest.retrievePrSize();
+			await pullRequest.retrieveRiskScore();
 
 			this._item = pullRequest;
 			this.registerPrListeners();
@@ -299,7 +299,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				emailForCommit,
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
-				pullRequestSize: pullRequest.prSizeCategory,
+				riskCategory: pullRequest.riskCategory,
 			};
 			this._postMessage({
 				command: 'pr.initialize',

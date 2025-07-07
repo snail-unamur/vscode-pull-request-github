@@ -10,7 +10,7 @@ export class SorteablePullRequests {
 
 	public async getSortedPullRequests(): Promise<PullRequestModel[]> {
 		await Promise.all(
-			this._sorteablePRs.map((pr) => pr.retrievePrSize())
+			this._sorteablePRs.map((pr) => pr.retrieveRiskScore())
 		);
 		this._sorteablePRs.sort((pr1, pr2) => pr1.compareTo(pr2));
 		return this._sorteablePRs;

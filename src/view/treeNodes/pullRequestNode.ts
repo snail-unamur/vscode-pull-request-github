@@ -300,7 +300,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 
 		const { title, number, author, isDraft, html_url } = this.pullRequestModel;
 
-		const sizeCategoryPrefix = isMeasurablePullRequest(this.pullRequestModel) ? `${this.pullRequestModel.prSizeCategory} - ` : '';
+		const sizeCategoryPrefix = isMeasurablePullRequest(this.pullRequestModel) ? `${this.pullRequestModel.riskCategory} - ` : '';
 		const prefixedTitle = `${sizeCategoryPrefix}${this.pullRequestModel.title}`;
 
 		const labelTitle = this.pullRequestModel.title.length > 50 ? `${prefixedTitle.substring(0, 50)}...` : prefixedTitle;
