@@ -113,8 +113,6 @@ const BATCH_SIZE = 100;
 export class PullRequestModel extends IssueModel<PullRequest> implements IPullRequestModel {
 	static override ID = 'PullRequestModel';
 
-	private _nbChangedLOC: number;
-
 	public isDraft?: boolean;
 	public localBranchName?: string;
 	public mergeBase?: string;
@@ -155,10 +153,6 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		this._isActive = isActive;
 	}
 
-	public get totalNumberOfChanges() {
-		return this._nbChangedLOC;
-	}
-
 	_telemetry: ITelemetry;
 
 	constructor(
@@ -183,7 +177,6 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		this.comments = [];
 		this._reviewThreadsCacheInitialized = false;
 		this._reviewThreadsCache = [];
-		this._nbChangedLOC = 0;
 	}
 
 	public async initializeReviewThreadCache(): Promise<void> {
@@ -218,7 +211,6 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		if (this._showChangesSinceReview !== isChangesSinceReview) {
 			this._showChangesSinceReview = isChangesSinceReview;
 			this._fileChanges.clear();
-			this._nbChangedLOC = 0;
 			this._onDidChangeChangesSinceReview.fire();
 		}
 	}
@@ -1304,15 +1296,12 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 	async getFileChangesInfo() {
 		this._fileChanges.clear();
-		this._nbChangedLOC = 0;
 		const data = await this.getRawFileChangesInfo();
 		const mergebase = this.mergeBase || this.base.sha;
 		const parsed = await parseDiff(data, mergebase);
 		parsed.forEach(fileChange => {
 			this._fileChanges.set(fileChange.fileName, fileChange);
 		});
-
-		this._nbChangedLOC = data.reduce((acc,d) => acc + d.additions + d.deletions, 0);
 
 		return parsed;
 	}
