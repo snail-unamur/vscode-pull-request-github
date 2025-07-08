@@ -39,10 +39,11 @@ export function measurablePullRequest(
 		}
 
 		async retrieveRiskScore() {
+			const repoOwner = pr.remote.owner;
 			const repoName = pr.remote.repositoryName;
 			const prNumber = pr.number;
 
-			const apiUrl = `http://localhost:5000/api/${repoName}/pullRequest/${prNumber}`;
+			const apiUrl = `http://localhost:5000/api/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
 			try {
 				const result = await (await fetch(apiUrl)).json();
