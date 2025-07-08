@@ -272,7 +272,8 @@ export class PrsTreeModel extends Disposable {
 			{ fetchNextPage }
 		);
 
-		const sorteablePullRequests = new SorteablePullRequests(prs.items);
+		const improvedPRClient = folderRepoManager.improvedPRClient;
+		const sorteablePullRequests = new SorteablePullRequests(prs.items, improvedPRClient);
 		const sortedPrs = await sorteablePullRequests.getSortedPullRequests();
 		const newItemResponse = {
 			items: sortedPrs,

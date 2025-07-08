@@ -1,11 +1,12 @@
 import { PullRequestModel } from '../github/pullRequestModel';
+import { ImprovedPullRequestClient } from './improvedPullRequestClient';
 import { measurablePullRequest, MeasurablePullRequestType } from './measureablePullRequest';
 
 export class SorteablePullRequests {
 	private _sorteablePRs: MeasurablePullRequestType[] = [];
 
-	constructor(prs: PullRequestModel[]) {
-		this._sorteablePRs = prs.map((pr) => measurablePullRequest(pr));
+	constructor(prs: PullRequestModel[], improvedPRClient: ImprovedPullRequestClient) {
+		this._sorteablePRs = prs.map((pr) => measurablePullRequest(pr, improvedPRClient));
 	}
 
 	public async getSortedPullRequests(): Promise<PullRequestModel[]> {

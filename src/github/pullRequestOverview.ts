@@ -250,7 +250,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				);
 			}
 
-			const pullRequest = measurablePullRequest(pullRequestRef);
+			const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
+			const pullRequest = measurablePullRequest(pullRequestRef, improvedPRClient);
 			await pullRequest.retrieveRiskScore();
 
 			this._item = pullRequest;

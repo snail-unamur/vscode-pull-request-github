@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
-import Logger from '../common/logger';
 import { PR_SETTINGS_NAMESPACE, PULL_REQUEST_RISK_A, PULL_REQUEST_RISK_B, PULL_REQUEST_RISK_C, PULL_REQUEST_RISK_D } from '../common/settingKeys';
-import { formatError } from '../common/utils';
 import { PullRequestModel } from '../github/pullRequestModel';
+import { ImprovedPullRequestClient } from './improvedPullRequestClient';
 import { PullRequestRiskCategory } from './pullRequestRiskCategory';
 
 export function isMeasurablePullRequest(obj: any): obj is MeasurablePullRequestType {
@@ -20,7 +19,8 @@ export type MeasurablePullRequestType = PullRequestModel & {
 };
 
 export function measurablePullRequest(
-	pr: PullRequestModel
+	pr: PullRequestModel,
+	improvedPRClient: ImprovedPullRequestClient
 ): MeasurablePullRequestType {
 	class SorteableImpl {
 		private _riskScore: number;
@@ -43,18 +43,8 @@ export function measurablePullRequest(
 			const repoName = pr.remote.repositoryName;
 			const prNumber = pr.number;
 
-			const apiUrl = `http://localhost:5000/api/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
-
-			try {
-				const result = await (await fetch(apiUrl)).json();
-
-				Logger.debug('Pull Request risk information retrieved.', prNumber.toString());
-
-				this._riskScore = result.analysis.risk_score.score;
-				this.addSizeCategory();
-			} catch (error) {
-				vscode.window.showErrorMessage(vscode.l10n.t('Failed to retreive risk informations: {0}', formatError(error)));
-			}
+			this._riskScore = await improvedPRClient.retrieveRiskScore(repoOwner, repoName, prNumber);
+			this.addSizeCategory();
 		}
 
 		private addSizeCategory() {
