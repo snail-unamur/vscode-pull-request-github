@@ -30,6 +30,11 @@ export function measurablePullRequest(
 			return this._riskScore;
 		}
 
+		set risk(newRisk: number) {
+			this._riskScore = newRisk;
+			this.addSizeCategory();
+		}
+
 		get riskCategory() {
 			return this._riskCategory;
 		}
@@ -43,8 +48,12 @@ export function measurablePullRequest(
 			const repoName = pr.remote.repositoryName;
 			const prNumber = pr.number;
 
-			this._riskScore = await improvedPRClient.retrieveRiskScore(repoOwner, repoName, prNumber);
-			this.addSizeCategory();
+			const analysis = await improvedPRClient.retrieveRiskScore(repoOwner, repoName, prNumber);
+
+			if (analysis) {
+				this._riskScore = analysis?.analysis.risk_score.score;
+				this.addSizeCategory();
+			}
 		}
 
 		private addSizeCategory() {

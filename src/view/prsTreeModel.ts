@@ -291,9 +291,9 @@ export class PrsTreeModel extends Disposable {
 		// Not useful for now
 		// this._telemetry.sendTelemetryEvent('pr.expand.all');
 		// Don't await this._getChecks. It fires an event that will be listened to.
-		this._getChecks(prs.items);
+		this._getChecks(newItemResponse.items);
 		this.hasLoaded = true;
-		return prs;
+		return newItemResponse;
 	}
 
 	override dispose() {

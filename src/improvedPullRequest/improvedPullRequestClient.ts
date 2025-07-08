@@ -15,7 +15,7 @@ export class ImprovedPullRequestClient {
 		repoOwner: string,
 		repoName: string,
 		prNumber: number
-	) {
+	): Promise<PullRequestRiskScore | undefined> {
 		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
 		try {
@@ -32,7 +32,7 @@ export class ImprovedPullRequestClient {
 				prNumber.toString()
 			);
 
-			return result.analysis.risk_score.score;
+			return result;
 		} catch (error) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t(
@@ -41,5 +41,41 @@ export class ImprovedPullRequestClient {
 				)
 			);
 		}
+
+		return undefined;
+	}
+
+	async retrieveMultipleRiskScore(
+		repoOwner: string,
+		repoName: string,
+		prNumbers: number[]
+	): Promise<PullRequestRiskScore[]> {
+		const prNumberQuery = prNumbers.join(',');
+		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
+
+		try {
+			const result = await (
+				await fetch(apiUrl, {
+					headers: {
+						Authorization: `Bearer ${this._token}`,
+					},
+				})
+			).json();
+
+			Logger.debug(
+				'Pull Requests risk informations retrieved.',
+				`${repoOwner}/${repoName}`
+			);
+
+			return result;
+		} catch (error) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					'Failed to retreive risk informations: {0}',
+					formatError(error)
+				)
+			);
+		}
+		return [];
 	}
 }
