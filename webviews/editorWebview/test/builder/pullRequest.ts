@@ -60,5 +60,5 @@ export const PullRequestBuilder = createBuilderClass<PullRequest>()({
 	lastReviewType: { default: undefined },
 	canAssignCopilot: { default: false },
 	reactions: { default: [] },
-	riskCategory: { default: 'A' },
+	analysis: { default: { riskValue: 0, riskCategory: 'A', metrics: []} },
 });

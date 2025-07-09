@@ -29,7 +29,7 @@ export function Header({
 	isIssue,
 	repositoryDefaultBranch,
 	events,
-	riskCategory
+	analysis
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
 	const [inEditMode, setEditMode] = useState(false);
@@ -45,7 +45,7 @@ export function Header({
 				setEditMode={setEditMode}
 				setCurrentTitle={setCurrentTitle}
 			/>
-			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} riskCategory={riskCategory} />
+			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} analysis={analysis} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -172,7 +172,7 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 		: null;
 }
 
-function Subtitle({ state, isDraft, isIssue, author, base, head, riskCategory }) {
+function Subtitle({ state, isDraft, isIssue, author, base, head, analysis }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue);
 
 	return (
@@ -181,8 +181,8 @@ function Subtitle({ state, isDraft, isIssue, author, base, head, riskCategory })
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
-			<div id="status" className={`size-badge-${riskCategory}`}>
-				<span>Risk category {riskCategory}</span>
+			<div id="status" className={`size-badge-${analysis.riskCategory}`}>
+				<span>Risk category {analysis.riskCategory}</span>
 			</div>
 			<div className="author">
 				{<Avatar for={author} />}

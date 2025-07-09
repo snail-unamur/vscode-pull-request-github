@@ -299,7 +299,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				emailForCommit,
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
-				riskCategory: pullRequest.riskCategory,
+				analysis: pullRequest.metrics,
 			};
 			this._postMessage({
 				command: 'pr.initialize',

@@ -7,6 +7,7 @@ import React, { useContext, useState } from 'react';
 import { COPILOT_LOGINS } from '../../src/common/copilot';
 import { gitHubLabelColor } from '../../src/common/utils';
 import { IMilestone, IProjectItem, reviewerId } from '../../src/github/interface';
+import { Metric } from '../../src/improvedPullRequest/improvedPullRequestMetrics'
 import { PullRequest } from '../../src/github/views';
 import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
@@ -209,6 +210,38 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 				) : (
 					<div className="section-placeholder">No milestone</div>
 				)}
+			</div>
+			<div id="metric" className="section">
+				<div className="section-header">
+					<div className="section-title">Metrics</div>
+				</div>
+				{pr.analysis ? pr.analysis.metrics.map(metric=> (
+					<Metric key={metric.name} {...metric} />
+				)) : (
+					<div className="section-placeholder">No metric</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function Metric(metric: Metric) {
+		const { pr } = useContext(PullRequestContext);
+	const backgroundBadgeColor = getComputedStyle(document.documentElement).getPropertyValue(
+		'--vscode-badge-foreground',
+	);
+	const labelColor = gitHubLabelColor(backgroundBadgeColor, pr.isDarkTheme, false);
+	return (
+		<div className="labels-list">
+			<div
+				className="section-item label"
+				style={{
+					backgroundColor: labelColor.backgroundColor,
+					color: labelColor.textColor,
+					borderColor: `${labelColor.borderColor}`,
+				}}
+			>
+				{metric.name}: {metric.value}
 			</div>
 		</div>
 	);

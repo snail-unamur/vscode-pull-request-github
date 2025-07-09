@@ -23,6 +23,10 @@ export function improvedPullRequest(
 	class SorteableImpl {
 		private _metrics: ImprovedPullRequestMetrics;
 
+		get metrics() {
+			return this._metrics;
+		}
+
 		get risk() {
 			return this._metrics.riskValue;
 		}
