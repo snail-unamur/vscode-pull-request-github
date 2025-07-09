@@ -1835,6 +1835,10 @@
 					"when": "false"
 				},
 				{
+					"command": "pr.checkoutFromReadonlyFile",
+					"when": "false"
+				},
+				{
 					"command": "pr.openChanges",
 					"when": "false"
 				},

@@ -5,6 +5,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import { OpenCommitChangesArgs } from '../../common/views';
 import { openPullRequestOnGitHub } from '../commands';
 import { IComment } from '../common/comment';
 import { copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '../common/copilot';
@@ -222,7 +223,6 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				isBranchUpToDateWithBase,
 				mergeability,
 				emailForCommit,
-				coAuthors
 			] = await Promise.all([
 				this._folderRepositoryManager.resolvePullRequest(
 					pullRequestModel.remote.owner,
@@ -242,7 +242,6 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				this._folderRepositoryManager.isHeadUpToDateWithBase(pullRequestModel),
 				pullRequestModel.getMergeability(),
 				this._folderRepositoryManager.getPreferredEmail(pullRequestModel),
-				pullRequestModel.getCoAuthors()
 			]);
 			if (!pullRequestRef) {
 				throw new Error(
@@ -270,7 +269,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			const reviewState = this.getCurrentUserReviewState(this._existingReviewers, currentUser);
 
 			Logger.debug('pr.initialize', PullRequestOverviewPanel.ID);
-			const baseContext = this.getInitializeContext(currentUser, pullRequest, coAuthors, timelineEvents, repositoryAccess, viewerCanEdit, []);
+			const baseContext = this.getInitializeContext(currentUser, pullRequest, timelineEvents, repositoryAccess, viewerCanEdit, []);
 
 			const context: Partial<PullRequest> = {
 				...baseContext,
@@ -392,6 +391,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				return this.openSessionLog(message);
 			case 'pr.cancel-coding-agent':
 				return this.cancelCodingAgent(message);
+			case 'pr.openCommitChanges':
+				return this.openCommitChanges(message);
 		}
 	}
 
@@ -483,6 +484,10 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		}
 	}
 
+	protected override _getTimeline(): Promise<TimelineEvent[]> {
+		return this._item.githubRepository.getTimelineEvents(this._item);
+	}
+
 	private async openDiff(message: IRequestMessage<{ comment: IComment }>): Promise<void> {
 		try {
 			const comment = message.args.comment;
@@ -519,7 +524,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			let events: TimelineEvent[] = [];
 			if (result) {
 				do {
-					events = await this._item.githubRepository.getTimelineEvents(this._item);
+					events = await this._getTimeline();
 				} while (copilotEventToStatus(mostRecentCopilotEvent(events)) !== CopilotPRStatus.Completed && await new Promise<boolean>(c => setTimeout(() => c(true), 2000)));
 			}
 			const reply: CancelCodingAgentReply = {
@@ -536,6 +541,16 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		}
 	}
 
+	private async openCommitChanges(message: IRequestMessage<OpenCommitChangesArgs>): Promise<void> {
+		try {
+			const { commitSha } = message.args;
+			await PullRequestModel.openCommitChanges(this._folderRepositoryManager, commitSha);
+		} catch (error) {
+			Logger.error(`Failed to open commit changes: ${formatError(error)}`, PullRequestOverviewPanel.ID);
+			vscode.window.showErrorMessage(vscode.l10n.t('Failed to open commit changes: {0}', formatError(error)));
+		}
+	}
+
 	private async openChanges(message?: IRequestMessage<{ openToTheSide?: boolean }>): Promise<void> {
 		const openToTheSide = message?.args?.openToTheSide || false;
 		return PullRequestModel.openChanges(this._folderRepositoryManager, this._item, openToTheSide);
@@ -549,7 +564,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			else {
 				await this._item.unresolveReviewThread(message.args.threadId);
 			}
-			const timelineEvents = await this._item.githubRepository.getTimelineEvents(this._item);
+			const timelineEvents = await this._getTimeline();
 			this._replyMessage(message, timelineEvents);
 		} catch (e) {
 			vscode.window.showErrorMessage(e);
@@ -666,13 +681,14 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		try {
 			const review = await action(context.body);
 			this.updateReviewers(review);
-			const allEvents = await this._item.githubRepository.getTimelineEvents(this._item);
+			const allEvents = await this._getTimeline();
 			const reviewMessage: SubmitReviewReply & { command: string } = {
 				command: 'pr.append-review',
 				reviewedEvent: review,
 				events: allEvents,
 				reviewers: this._existingReviewers
 			};
+			this.tryScheduleCopilotRefresh(review.body, review.state);
 			await this._postMessage(reviewMessage);
 		} catch (e) {
 			vscode.window.showErrorMessage(vscode.l10n.t('Submitting review failed. {0}', formatError(e)));
@@ -686,12 +702,13 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		try {
 			const review = await action(message.args);
 			this.updateReviewers(review);
-			const allEvents = await this._item.githubRepository.getTimelineEvents(this._item);
+			const allEvents = await this._getTimeline();
 			const reply: SubmitReviewReply = {
 				reviewedEvent: review,
 				events: allEvents,
 				reviewers: this._existingReviewers,
 			};
+			this.tryScheduleCopilotRefresh(review.body, review.state);
 			this._replyMessage(message, reply);
 		} catch (e) {
 			vscode.window.showErrorMessage(vscode.l10n.t('Submitting review failed. {0}', formatError(e)));
@@ -823,7 +840,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		} while (attemptsRemaining > 0 && mergability === PullRequestMergeability.Unknown);
 
 		const result: Partial<PullRequest> = {
-			events: await this._item.githubRepository.getTimelineEvents(this._item),
+			events: await this._getTimeline(),
 			mergeable: mergability,
 		};
 		await this.refreshPanel();
