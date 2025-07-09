@@ -591,23 +591,23 @@ body button .icon {
 	background-color: var(--vscode-pullRequests-draft);
 }
 
-.size-badge-a {
+.size-badge-A {
 	background-color: var(--vscode-pullRequests-sizeA);
 }
 
-.size-badge-b {
+.size-badge-B {
 	background-color: var(--vscode-pullRequests-sizeB);
 }
 
-.size-badge-c {
+.size-badge-C {
 	background-color: var(--vscode-pullRequests-sizeC);
 }
 
-.size-badge-d {
+.size-badge-D {
 	background-color: var(--vscode-pullRequests-sizeD);
 }
 
-.size-badge-e {
+.size-badge-E {
 	background-color: var(--vscode-pullRequests-sizeE);
 }
 

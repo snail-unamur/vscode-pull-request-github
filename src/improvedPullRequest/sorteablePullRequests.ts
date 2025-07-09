@@ -1,12 +1,12 @@
 import { PullRequestModel } from '../github/pullRequestModel';
 import { ImprovedPullRequestClient } from './improvedPullRequestClient';
 import {
-	measurablePullRequest,
-	MeasurablePullRequestType,
-} from './measureablePullRequest';
+	improvedPullRequest,
+	ImprovedPullRequestType,
+} from './improvedPullRequest';
 
 export class SorteablePullRequests {
-	private _sorteablePRs: MeasurablePullRequestType[] = [];
+	private _sorteablePRs: ImprovedPullRequestType[] = [];
 	private _improvedPRClient: ImprovedPullRequestClient;
 
 	constructor(
@@ -14,7 +14,7 @@ export class SorteablePullRequests {
 		improvedPRClient: ImprovedPullRequestClient
 	) {
 		this._sorteablePRs = prs.map((pr) =>
-			measurablePullRequest(pr, improvedPRClient)
+			improvedPullRequest(pr, improvedPRClient)
 		);
 		this._improvedPRClient = improvedPRClient;
 	}
@@ -36,20 +36,18 @@ export class SorteablePullRequests {
 		const prNumbers = this._sorteablePRs.map((pr) => pr.number);
 		const { owner: repoOwner, repositoryName: repoName } = firstPR.remote;
 
-		const prScores = await this._improvedPRClient.retrieveMultipleRiskScore(
-			repoOwner,
-			repoName,
-			prNumbers
-		);
-
-		const scoreMap = new Map(
-			prScores.map((pr) => [pr.number, pr.analysis.risk_score.score])
-		);
+		const metricsPrMap =
+			await this._improvedPRClient.retrieveMultipleMetrics(
+				repoOwner,
+				repoName,
+				prNumbers
+			);
 
 		this._sorteablePRs.forEach((pr) => {
-			const score = scoreMap.get(pr.number);
-			if (score !== undefined) {
-				pr.risk = score;
+			const metrics = metricsPrMap.get(pr.number);
+
+			if (metrics) {
+				pr.metrics = metrics;
 			}
 		});
 	}

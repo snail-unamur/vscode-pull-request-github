@@ -13,7 +13,6 @@ import { useStateProp } from '../common/hooks';
 import { checkIcon, issueClosedIcon, issueIcon, mergeIcon, prClosedIcon, prDraftIcon, prOpenIcon } from './icon';
 import { nbsp } from './space';
 import { AuthorLink, Avatar } from './user';
-import { PullRequestRiskCategory } from '../../src/improvedPullRequest/pullRequestRiskCategory'
 
 export function Header({
 	canEdit,
@@ -175,7 +174,6 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 
 function Subtitle({ state, isDraft, isIssue, author, base, head, riskCategory }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue);
-	const { riskText, riskColor } = getRiskLabel(riskCategory);
 
 	return (
 		<div className="subtitle">
@@ -183,8 +181,8 @@ function Subtitle({ state, isDraft, isIssue, author, base, head, riskCategory })
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
-			<div id="status" className={`size-badge-${riskColor}`}>
-				<span>Risk category {riskText}</span>
+			<div id="status" className={`size-badge-${riskCategory}`}>
+				<span>Risk category {riskCategory}</span>
 			</div>
 			<div className="author">
 				{<Avatar for={author} />}
@@ -271,20 +269,5 @@ function getActionText(state: GithubItemStateEnum) {
 		return 'merged changes';
 	} else {
 		return 'wants to merge changes';
-	}
-}
-
-export function getRiskLabel(risk: PullRequestRiskCategory) {
-	switch (risk) {
-		case PullRequestRiskCategory.A :
-			return { riskText: PullRequestRiskCategory.A, riskColor: 'a'};
-		case PullRequestRiskCategory.B :
-			return { riskText: PullRequestRiskCategory.B, riskColor: 'b'};
-		case PullRequestRiskCategory.C :
-			return { riskText: PullRequestRiskCategory.C, riskColor: 'c'};
-		case PullRequestRiskCategory.D :
-			return { riskText: PullRequestRiskCategory.D, riskColor: 'd'};
-		case PullRequestRiskCategory.E :
-			return { riskText: PullRequestRiskCategory.E, riskColor: 'e'};
 	}
 }

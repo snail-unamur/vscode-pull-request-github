@@ -93,26 +93,6 @@
 					"default": "http://localhost:5000/api",
 					"description": "URL of the Improved PR server"
 				},
-				"githubPullRequests.risk.a": {
-					"type": "number",
-					"default": 20,
-					"description": "Threshold of a pull request of risk A."
-				},
-				"githubPullRequests.risk.b": {
-					"type": "number",
-					"default": 40,
-					"description": "Threshold of a pull request of risk B."
-				},
-				"githubPullRequests.risk.c": {
-					"type": "number",
-					"default": 60,
-					"description": "Threshold of a pull request of risk C."
-				},
-				"githubPullRequests.risk.d": {
-					"type": "number",
-					"default": 80,
-					"description": "Threshold of a pull request of risk D."
-				},
 				"githubPullRequests.pullRequestTitle": {
 					"deprecationMessage": "The pull request title now uses the same defaults as GitHub, and can be edited before create.",
 					"type": "string",

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import Logger from '../common/logger';
 import { formatError } from '../common/utils';
+import { ImprovedPullRequestMetrics } from './improvedPullRequestMetrics';
 
 export class ImprovedPullRequestClient {
 	private _token: string;
@@ -11,11 +12,11 @@ export class ImprovedPullRequestClient {
 		this._baseUrl = baseUrl;
 	}
 
-	async retrieveRiskScore(
+	async retrieveMetrics(
 		repoOwner: string,
 		repoName: string,
 		prNumber: number
-	): Promise<PullRequestRiskScore | undefined> {
+	): Promise<ImprovedPullRequestMetrics | undefined> {
 		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
 		try {
@@ -32,7 +33,7 @@ export class ImprovedPullRequestClient {
 				prNumber.toString()
 			);
 
-			return result;
+			return result.analysis;
 		} catch (error) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t(
@@ -45,16 +46,17 @@ export class ImprovedPullRequestClient {
 		return undefined;
 	}
 
-	async retrieveMultipleRiskScore(
+	async retrieveMultipleMetrics(
 		repoOwner: string,
 		repoName: string,
 		prNumbers: number[]
-	): Promise<PullRequestRiskScore[]> {
+	): Promise<Map<number, ImprovedPullRequestMetrics>> {
 		const prNumberQuery = prNumbers.join(',');
 		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
+		const result = new Map();
 
 		try {
-			const result = await (
+			const data = await (
 				await fetch(apiUrl, {
 					headers: {
 						Authorization: `Bearer ${this._token}`,
@@ -67,6 +69,10 @@ export class ImprovedPullRequestClient {
 				`${repoOwner}/${repoName}`
 			);
 
+			data.forEach((m) => {
+				result.set(m.prNumber, m.analysis);
+			});
+
 			return result;
 		} catch (error) {
 			vscode.window.showErrorMessage(
@@ -76,6 +82,6 @@ export class ImprovedPullRequestClient {
 				)
 			);
 		}
-		return [];
+		return result;
 	}
 }

@@ -16,7 +16,7 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
-import { measurablePullRequest } from '../improvedPullRequest/measureablePullRequest';
+import { improvedPullRequest } from '../improvedPullRequest/improvedPullRequest';
 import { SessionLogViewManager } from '../view/sessionLogView';
 import { getCopilotApi } from './copilotApi';
 import { FolderRepositoryManager } from './folderRepositoryManager';
@@ -251,8 +251,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			}
 
 			const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
-			const pullRequest = measurablePullRequest(pullRequestRef, improvedPRClient);
-			await pullRequest.retrieveRiskScore();
+			const pullRequest = improvedPullRequest(pullRequestRef, improvedPRClient);
+			await pullRequest.retrieveMetrics();
 
 			this._item = pullRequest;
 			this.registerPrListeners();

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CommentEvent, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
-import { PullRequestRiskCategory } from '../improvedPullRequest/pullRequestRiskCategory';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -99,7 +98,7 @@ export interface PullRequest extends Issue {
 	lastReviewType?: ReviewType;
 	revertable?: boolean;
 	busy?: boolean;
-	riskCategory: PullRequestRiskCategory;
+	riskCategory: string;
 }
 
 export interface ProjectItemsReply {

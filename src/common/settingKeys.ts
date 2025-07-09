@@ -94,8 +94,3 @@ export const CODING_AGENT_AUTO_COMMIT_AND_PUSH = 'autoCommitAndPush';
 // Pull Request Improved
 export const IMPROVED_PULL_REQUEST_NAMESPACE = 'improvedPulRequests';
 export const METRIC_SERVER_URL = 'serverURL';
-
-export const PULL_REQUEST_RISK_A = 'risk.a';
-export const PULL_REQUEST_RISK_B = 'risk.b';
-export const PULL_REQUEST_RISK_C = 'risk.c';
-export const PULL_REQUEST_RISK_D = 'risk.d';

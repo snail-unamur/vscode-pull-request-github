@@ -5,7 +5,6 @@
 
 import { GithubItemStateEnum, PullRequestMergeability } from '../../../../src/github/interface';
 import { PullRequest } from '../../../../src/github/views';
-import { PullRequestRiskCategory } from '../../../../src/improvedPullRequest/pullRequestRiskCategory';
 import { createBuilderClass } from '../../../../src/test/builders/base';
 import { CombinedStatusBuilder } from '../../../../src/test/builders/rest/combinedStatusBuilder';
 
@@ -61,5 +60,5 @@ export const PullRequestBuilder = createBuilderClass<PullRequest>()({
 	lastReviewType: { default: undefined },
 	canAssignCopilot: { default: false },
 	reactions: { default: [] },
-	riskCategory: { default: PullRequestRiskCategory.A },
+	riskCategory: { default: 'A' },
 });

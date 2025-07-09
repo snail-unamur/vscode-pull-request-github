@@ -14,7 +14,7 @@ import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { CopilotWorkingStatus } from '../../github/githubRepository';
 import { NotificationProvider } from '../../github/notifications';
 import { IResolvedPullRequestModel, PullRequestModel } from '../../github/pullRequestModel';
-import { isMeasurablePullRequest } from '../../improvedPullRequest/measureablePullRequest';
+import { isImprovedPullRequest } from '../../improvedPullRequest/improvedPullRequest';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../fileChangeModel';
 import { getInMemPRFileSystemProvider, provideDocumentContentForChangeModel } from '../inMemPRContentProvider';
 import { getIconForeground, getListErrorForeground, getListWarningForeground, getNotebookStatusSuccessIconForeground } from '../theme';
@@ -300,7 +300,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 
 		const { title, number, author, isDraft, html_url } = this.pullRequestModel;
 
-		const sizeCategoryPrefix = isMeasurablePullRequest(this.pullRequestModel) ? `${this.pullRequestModel.riskCategory} - ` : '';
+		const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) ? `${this.pullRequestModel.riskCategory} - ` : '';
 		const prefixedTitle = `${sizeCategoryPrefix}${this.pullRequestModel.title}`;
 
 		const labelTitle = this.pullRequestModel.title.length > 50 ? `${prefixedTitle.substring(0, 50)}...` : prefixedTitle;
