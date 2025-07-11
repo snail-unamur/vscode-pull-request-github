@@ -88,7 +88,7 @@
 			"type": "object",
 			"title": "GitHub Pull Requests",
 			"properties": {
-				"improvedPulRequests.serverURL": {
+				"improvedPullRequests.serverURL": {
 					"type": "string",
 					"default": "http://localhost:5000/api",
 					"description": "URL of the Improved PR server"
