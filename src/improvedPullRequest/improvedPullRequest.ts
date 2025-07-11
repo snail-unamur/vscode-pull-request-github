@@ -8,6 +8,10 @@ export function isImprovedPullRequest(obj: any): obj is ImprovedPullRequestType 
 	);
 }
 
+export function hasMetrics(pr: ImprovedPullRequestType): boolean {
+	return pr.metrics != undefined;
+}
+
 export type ImprovedPullRequestType = PullRequestModel & {
 	retrieveMetrics(): Promise<void>;
 	compareTo(other: any): number;

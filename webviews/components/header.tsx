@@ -181,9 +181,14 @@ function Subtitle({ state, isDraft, isIssue, author, base, head, analysis }) {
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
+			{ analysis ?
 			<div id="status" className={`size-badge-${analysis.riskCategory}`}>
 				<span>Risk category {analysis.riskCategory}</span>
+			</div> : <div id="status" className={`size-badge-notfound`}>
+				<span>No risk category retreived</span>
 			</div>
+			}
+
 			<div className="author">
 				{<Avatar for={author} />}
 				<div className="merge-branches">

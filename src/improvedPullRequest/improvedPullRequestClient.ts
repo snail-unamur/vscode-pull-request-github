@@ -1,87 +1,75 @@
 import * as vscode from 'vscode';
 import Logger from '../common/logger';
-import { formatError } from '../common/utils';
 import { ImprovedPullRequestMetrics } from './improvedPullRequestMetrics';
 
 export class ImprovedPullRequestClient {
-	private _token: string;
-	private _baseUrl: string;
+  private _token: string;
+  private _baseUrl: string;
 
-	constructor(token: string, baseUrl: string) {
-		this._token = token;
-		this._baseUrl = baseUrl;
-	}
+  constructor(token: string, baseUrl: string) {
+    this._token = token;
+    this._baseUrl = baseUrl;
+  }
 
-	async retrieveMetrics(
-		repoOwner: string,
-		repoName: string,
-		prNumber: number
-	): Promise<ImprovedPullRequestMetrics | undefined> {
-		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
+  async retrieveMetrics(
+    repoOwner: string,
+    repoName: string,
+    prNumber: number
+  ): Promise<ImprovedPullRequestMetrics | undefined> {
+    const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
-		try {
-			const result = await (
-				await fetch(apiUrl, {
-					headers: {
-						Authorization: `Bearer ${this._token}`,
-					},
-				})
-			).json();
+    try {
+      const query = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${this._token}`,
+        },
+      });
 
-			Logger.debug(
-				'Pull Request risk information retrieved.',
-				prNumber.toString()
-			);
+      const data = await query.json();
 
-			return result.analysis;
-		} catch (error) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					'Failed to retreive risk informations: {0}',
-					formatError(error)
-				)
-			);
-		}
+      Logger.debug(
+        `PR #${prNumber} metrics retrieved.`,
+        'Improved Pull Request'
+      );
 
-		return undefined;
-	}
+      return data.analysis;
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        vscode.l10n.t(`Failed to retreive metrics for PR #${prNumber}`)
+      );
+    }
 
-	async retrieveMultipleMetrics(
-		repoOwner: string,
-		repoName: string,
-		prNumbers: number[]
-	): Promise<Map<number, ImprovedPullRequestMetrics>> {
-		const prNumberQuery = prNumbers.join(',');
-		const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
-		const result = new Map();
+    return undefined;
+  }
 
-		try {
-			const data = await (
-				await fetch(apiUrl, {
-					headers: {
-						Authorization: `Bearer ${this._token}`,
-					},
-				})
-			).json();
+  async retrieveMultipleMetrics(
+    repoOwner: string,
+    repoName: string,
+    prNumbers: number[]
+  ): Promise<Map<number, ImprovedPullRequestMetrics>> {
+    const prNumberQuery = prNumbers.join(',');
+    const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
+    const result = new Map();
 
-			Logger.debug(
-				'Pull Requests risk informations retrieved.',
-				`${repoOwner}/${repoName}`
-			);
+    try {
+      const query = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${this._token}`,
+        },
+      });
 
-			data.forEach((m) => {
-				result.set(m.prNumber, m.analysis);
-			});
+      Logger.debug('Metrics for PRs retrieved.', 'Improved Pull Request');
 
-			return result;
-		} catch (error) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					'Failed to retreive risk informations: {0}',
-					formatError(error)
-				)
-			);
-		}
-		return result;
-	}
+      const data = await query.json();
+
+      data.forEach((pr) => {
+        result.set(pr.prNumber, pr.analysis);
+      });
+
+      return result;
+    } catch (error) {
+      throw Error('Failed to retreive metrics for PRs.');
+    }
+    return result;
+  }
 }
