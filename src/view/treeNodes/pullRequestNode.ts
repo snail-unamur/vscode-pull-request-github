@@ -56,7 +56,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		this.registerConfigurationChange();
 		this._register(this.pullRequestModel.onDidInvalidate(() => this.refresh(this)));
 		this._register(this._folderReposManager.onDidChangeActivePullRequest(e => {
-			if (e.new === this.pullRequestModel.number || e.old === this.pullRequestModel.number) {
+			if (e.new?.number === this.pullRequestModel.number || e.old?.number === this.pullRequestModel.number) {
 				this.refresh(this);
 			}
 		}));
@@ -102,7 +102,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 				dirNode.finalize();
 				if (dirNode.label === '') {
 					// nothing on the root changed, pull children to parent
-					result.push(...dirNode.children);
+					result.push(...dirNode._children);
 				} else {
 					result.push(dirNode);
 				}
@@ -115,7 +115,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 				this.reopenNewPrDiffs(this.pullRequestModel);
 			}
 
-			this.children = result;
+			this._children = result;
 
 			// Kick off review thread initialization but don't await it.
 			// Events will be fired later that will cause the tree to update when this is ready.

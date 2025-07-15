@@ -22,7 +22,6 @@ export class CommitNode extends TreeNode implements vscode.TreeItem {
 	public collapsibleState: vscode.TreeItemCollapsibleState;
 	public iconPath: vscode.Uri | undefined;
 	public contextValue?: string;
-	public description: string | undefined;
 
 	constructor(
 		parent: TreeNodeParent,
@@ -107,7 +106,7 @@ export class CommitNode extends TreeNode implements vscode.TreeItem {
 			dirNode.finalize();
 			if (dirNode.label === '') {
 				// nothing on the root changed, pull children to parent
-				result.push(...dirNode.children);
+				result.push(...dirNode._children);
 			} else {
 				result.push(dirNode);
 			}
@@ -115,7 +114,7 @@ export class CommitNode extends TreeNode implements vscode.TreeItem {
 			// flat view
 			result = fileChangeNodes;
 		}
-		this.children = result;
+		this._children = result;
 		return result;
 	}
 }

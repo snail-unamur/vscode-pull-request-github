@@ -135,6 +135,8 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 	public repositoryPageInformation: Map<string, PageInformation> = new Map<string, PageInformation>();
 	public contextValue: string;
 	public resourceUri: vscode.Uri;
+	public tooltip?: string | vscode.MarkdownString | undefined;
+	readonly isCopilot: boolean;
 
 	constructor(
 		parent: TreeNodeParent,
@@ -150,8 +152,8 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 		super(parent);
 
 		this.prs = new Map();
-
-		const hasCopilotChanges = _categoryQuery && isCopilotQuery(_categoryQuery) && this._copilotManager.notificationsCount > 0;
+		this.isCopilot = !!_categoryQuery && isCopilotQuery(_categoryQuery);
+		const hasCopilotChanges = this.isCopilot && this._copilotManager.notificationsCount > 0;
 
 		switch (this.type) {
 			case PRType.All:
@@ -190,15 +192,49 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 		if (this._categoryQuery) {
 			this.contextValue = 'query';
 		}
+
+		if (this.isCopilot) {
+			this.tooltip = vscode.l10n.t('Pull requests you asked the coding agent to create');
+		} else if (this.type === PRType.LocalPullRequest) {
+			this.tooltip = vscode.l10n.t('Pull requests for branches you have locally');
+		} else if (this.type === PRType.All) {
+			this.tooltip = vscode.l10n.t('All open pull requests in the current repository');
+		} else if (_categoryQuery) {
+			this.tooltip = new vscode.MarkdownString(vscode.l10n.t('Pull requests for query: `{0}`', _categoryQuery));
+		} else {
+			this.tooltip = this.label;
+		}
+
+		this.description = this._getDescription();
+	}
+
+	private _getDescription(): string | undefined {
+		if (!this.isCopilot) {
+			return undefined;
+		}
+		const counts = this._copilotManager.getCounts();
+		if (counts.total === 0) {
+			return undefined;
+		} else if (counts.error > 0) {
+			if (counts.inProgress > 0) {
+				return vscode.l10n.t('{0} in progress, {1} with errors', counts.inProgress, counts.error);
+			} else {
+				return vscode.l10n.t('{0} with errors', counts.error);
+			}
+		} else if (counts.inProgress > 0) {
+			return vscode.l10n.t('{0} in progress', counts.inProgress);
+		} else {
+			return vscode.l10n.t('done working on {0}', counts.total);
+		}
 	}
 
 	public async expandPullRequest(pullRequest: PullRequestModel, retry: boolean = true): Promise<boolean> {
-		if (!this.children && retry) {
+		if (!this._children && retry) {
 			await this.getChildren();
 			retry = false;
 		}
-		if (this.children) {
-			for (const child of this.children) {
+		if (this._children) {
+			for (const child of this._children) {
 				if (child instanceof PRNode) {
 					if (child.pullRequestModel.equals(pullRequest)) {
 						this.reveal(child, { expand: true, select: true });
@@ -217,8 +253,8 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 
 	override async getChildren(shouldDispose: boolean = true): Promise<TreeNode[]> {
 		await super.getChildren(shouldDispose);
-		if (!shouldDispose && this.children) {
-			return this.children;
+		if (!shouldDispose && this._children) {
+			return this._children;
 		}
 		const isFirstLoad = !this._firstLoad;
 		if (isFirstLoad) {
@@ -291,13 +327,13 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 				nodes.push(new PRCategoryActionNode(this, PRCategoryActionType.TryOtherRemotes, this));
 			}
 
-			this.children = nodes;
+			this._children = nodes;
 			return nodes;
 		} else {
 			const category = needLogin ? PRCategoryActionType.Login : PRCategoryActionType.Empty;
 			const result = [new PRCategoryActionNode(this, category)];
 
-			this.children = result;
+			this._children = result;
 			return result;
 		}
 	}
