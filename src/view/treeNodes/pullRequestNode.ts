@@ -54,7 +54,11 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		super(parent);
 		this.registerSinceReviewChange();
 		this.registerConfigurationChange();
-		this._register(this.pullRequestModel.onDidInvalidate(() => this.refresh(this)));
+		this._register(this.pullRequestModel.onDidChange((e) => {
+			if (e.title || e.state) {
+				this.refresh(this);
+			}
+		}));
 		this._register(this._folderReposManager.onDidChangeActivePullRequest(e => {
 			if (e.new?.number === this.pullRequestModel.number || e.old?.number === this.pullRequestModel.number) {
 				this.refresh(this);
@@ -267,7 +271,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 	}
 
 	private async _getIcon(): Promise<vscode.Uri | vscode.ThemeIcon | { light: string | vscode.Uri; dark: string | vscode.Uri }> {
-		const copilotWorkingStatus = await this.pullRequestModel.githubRepository.copilotWorkingStatus(this.pullRequestModel);
+		const copilotWorkingStatus = await this.pullRequestModel.copilotWorkingStatus(this.pullRequestModel);
 		const theme = this._folderReposManager.themeWatcher.themeData;
 		if (!theme || copilotWorkingStatus === CopilotWorkingStatus.NotCopilotIssue) {
 			return (await DataUri.avatarCirclesAsImageDataUris(this._folderReposManager.context, [this.pullRequestModel.author], 16, 16))[0]

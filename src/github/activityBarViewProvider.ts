@@ -79,7 +79,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 		} while (attemptsRemaining > 0 && mergability === PullRequestMergeability.Unknown);
 
 		const result: Partial<PullRequest> = {
-			events: await this._item.githubRepository.getTimelineEvents(this._item),
+			events: await this._item.getTimelineEvents(this._item),
 			mergeable: mergability,
 		};
 		await this.refresh();
@@ -188,7 +188,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 			disposeAll(this._prDisposables);
 		}
 		this._prDisposables = [];
-		this._prDisposables.push(pullRequestModel.onDidInvalidate(() => this.updatePullRequest(pullRequestModel)));
+		this._prDisposables.push(pullRequestModel.onDidChange(() => this.updatePullRequest(pullRequestModel)));
 		this._prDisposables.push(pullRequestModel.onDidChangePendingReviewState(() => this.updatePullRequest(pullRequestModel)));
 	}
 
@@ -213,7 +213,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 				pullRequestModel.number,
 			),
 			this._folderRepositoryManager.getPullRequestRepositoryAccessAndMergeMethods(pullRequestModel),
-			pullRequestModel.githubRepository.getTimelineEvents(pullRequestModel),
+			pullRequestModel.getTimelineEvents(pullRequestModel),
 			pullRequestModel.getReviewRequests(),
 			this._folderRepositoryManager.getBranchNameForPullRequest(pullRequestModel),
 			this._folderRepositoryManager.getPullRequestRepositoryDefaultBranch(pullRequestModel),
