@@ -29,6 +29,7 @@ interface RadarChartProps {
 const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
   const themeColor = isDarkTheme ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.1)';
   const textColor = isDarkTheme ? '#eeeeee' : '#000000';
+  const fontFamily = getComputedStyle(document.body).getPropertyValue('--vscode-font-family').trim();
 
   const editorColor = useMemo(() => {
     const raw = getComputedStyle(document.body).getPropertyValue('--vscode-textLink-foreground').trim();
@@ -86,6 +87,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
         pointLabels: {
           color: textColor,
           font: {
+            family: fontFamily,
             size: 13,
           },
         },
