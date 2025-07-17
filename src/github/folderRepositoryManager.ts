@@ -44,7 +44,7 @@ import { ConflictResolutionCoordinator } from './conflictResolutionCoordinator';
 import { Conflict, ConflictResolutionModel } from './conflictResolutionModel';
 import { CredentialStore } from './credentials';
 import { CopilotWorkingStatus, GitHubRepository, GraphQLError, GraphQLErrorType, IMetadata, ItemsData, PULL_REQUEST_PAGE_SIZE, PullRequestData, TeamReviewerRefreshKind, ViewerPermission } from './githubRepository';
-import { MergeMethod as GraphQLMergeMethod, MergePullRequestInput, MergePullRequestResponse, PullRequestResponse, PullRequestState, UserResponse } from './graphql';
+import { MergeMethod as GraphQLMergeMethod, MergePullRequestInput, MergePullRequestResponse, PullRequestResponse, PullRequestState } from './graphql';
 import { IAccount, ILabel, IMilestone, IProject, IPullRequestsPagingOptions, Issue, ITeam, MergeMethod, PRType, PullRequestMergeability, RepoAccessAndMergeMethods, User } from './interface';
 import { IssueModel } from './issueModel';
 import { PullRequestGitHelper, PullRequestMetadata } from './pullRequestGitHelper';
@@ -57,7 +57,6 @@ import {
 	loginComparator,
 	parseCombinedTimelineEvents,
 	parseGraphQLPullRequest,
-	parseGraphQLUser,
 	teamComparator,
 	variableSubstitution,
 } from './utils';
@@ -218,6 +217,8 @@ export class FolderRepositoryManager extends Disposable {
 	private _onDidChangePullRequestsEvents: vscode.Disposable[] = [];
 	private readonly _onDidChangeAnyPullRequests = this._register(new vscode.EventEmitter<IssueModel[]>());
 	readonly onDidChangeAnyPullRequests: vscode.Event<IssueModel[]> = this._onDidChangeAnyPullRequests.event;
+	private readonly _onDidAddPullRequest = this._register(new vscode.EventEmitter<IssueModel>());
+	readonly onDidAddPullRequest: vscode.Event<IssueModel> = this._onDidAddPullRequest.event;
 
 	private _onDidDispose = this._register(new vscode.EventEmitter<void>());
 	readonly onDidDispose: vscode.Event<void> = this._onDidDispose.event;
@@ -539,6 +540,7 @@ export class FolderRepositoryManager extends Disposable {
 			this._githubRepositories = repositories;
 			for (const repo of this._githubRepositories) {
 				this._onDidChangePullRequestsEvents.push(repo.onDidChangePullRequests(e => this._onDidChangeAnyPullRequests.fire(e)));
+				this._onDidChangePullRequestsEvents.push(repo.onDidAddPullRequest(e => this._onDidAddPullRequest.fire(e)));
 			}
 			oldRepositories.filter(old => this._githubRepositories.indexOf(old) < 0).forEach(repo => repo.dispose());
 
@@ -1743,7 +1745,7 @@ export class FolderRepositoryManager extends Disposable {
 				*/
 				this.telemetry.sendTelemetryEvent('pr.merge.success');
 				this._onDidMergePullRequest.fire();
-				return { merged: true, message: '', timeline: await parseCombinedTimelineEvents(result.data?.mergePullRequest.pullRequest.timelineItems.nodes ?? [], await pullRequest.githubRepository.getCopilotTimelineEvents(pullRequest), pullRequest.githubRepository) };
+				return { merged: true, message: '', timeline: await parseCombinedTimelineEvents(result.data?.mergePullRequest.pullRequest.timelineItems.nodes ?? [], await pullRequest.getCopilotTimelineEvents(pullRequest), pullRequest.githubRepository) };
 			})
 			.catch(e => {
 				/* __GDPR__
@@ -2226,23 +2228,7 @@ export class FolderRepositoryManager extends Disposable {
 	async resolveUser(owner: string, repositoryName: string, login: string): Promise<User | undefined> {
 		Logger.debug(`Fetch user ${login}`, this.id);
 		const githubRepository = await this.createGitHubRepositoryFromOwnerName(owner, repositoryName);
-		const { query, schema } = await githubRepository.ensure();
-
-		try {
-			const { data } = await query<UserResponse>({
-				query: schema.GetUser,
-				variables: {
-					login,
-				},
-			});
-			return parseGraphQLUser(data, githubRepository);
-		} catch (e) {
-			// Ignore cases where the user doesn't exist
-			if (!(e.message as (string | undefined))?.startsWith('GraphQL error: Could not resolve to a User with the login of')) {
-				Logger.warn(e.message);
-			}
-		}
-		return undefined;
+		return githubRepository.resolveUser(login);
 	}
 
 	async getMatchingPullRequestMetadataForBranch() {
@@ -2546,7 +2532,7 @@ export class FolderRepositoryManager extends Disposable {
 	private async promptPullBrach(pr: PullRequestModel, branch: Branch, autoStashSetting?: boolean) {
 		if (!this._updateMessageShown || autoStashSetting) {
 			// When the PR is from Copilot, we only want to show the notification when Copilot is done working
-			const copilotStatus = await pr.githubRepository.copilotWorkingStatus(pr);
+			const copilotStatus = await pr.copilotWorkingStatus(pr);
 			if (copilotStatus === CopilotWorkingStatus.InProgress) {
 				return;
 			}
