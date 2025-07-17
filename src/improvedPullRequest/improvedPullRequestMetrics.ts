@@ -1,11 +1,11 @@
 export type ImprovedPullRequestMetrics = {
-    riskValue: number,
     riskCategory: string,
-    metrics: Metric[],
+    riskValue: number,
+    radarMetrics: Metric[],
 }
 
 export type Metric = {
+    id: string
     name: string,
-	value: number,
-	coefficient: number,
+	radarValue: number,
 }

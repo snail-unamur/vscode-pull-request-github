@@ -7,13 +7,13 @@ import React, { useContext, useState } from 'react';
 import { COPILOT_LOGINS } from '../../src/common/copilot';
 import { gitHubLabelColor } from '../../src/common/utils';
 import { IMilestone, IProjectItem, reviewerId } from '../../src/github/interface';
-import { Metric } from '../../src/improvedPullRequest/improvedPullRequestMetrics'
 import { PullRequest } from '../../src/github/views';
 import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
 import { Reviewer } from './reviewer';
+import RadarChart from './radarChart';
 
 export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot }: PullRequest) {
 	const {
@@ -215,33 +215,9 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 				<div className="section-header">
 					<div className="section-title">Metrics</div>
 				</div>
-				{pr.analysis ? pr.analysis.metrics.map(metric=> (
-					<Metric key={metric.name} {...metric} />
-				)) : (
+				{pr.analysis ?  (<RadarChartDisplay key={'Radar-chart'} />) : (
 					<div className="section-placeholder">No metric</div>
 				)}
-			</div>
-		</div>
-	);
-}
-
-function Metric(metric: Metric) {
-		const { pr } = useContext(PullRequestContext);
-	const backgroundBadgeColor = getComputedStyle(document.documentElement).getPropertyValue(
-		'--vscode-badge-foreground',
-	);
-	const labelColor = gitHubLabelColor(backgroundBadgeColor, pr.isDarkTheme, false);
-	return (
-		<div className="labels-list">
-			<div
-				className="section-item label"
-				style={{
-					backgroundColor: labelColor.backgroundColor,
-					color: labelColor.textColor,
-					borderColor: `${labelColor.borderColor}`,
-				}}
-			>
-				{metric.name}: {metric.value}
 			</div>
 		</div>
 	);
@@ -279,6 +255,14 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 			</div>
 		</div>
 	);
+}
+
+function RadarChartDisplay() {
+	const { pr } = useContext(PullRequestContext);
+
+	return (
+		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+	)
 }
 
 function Project(project: IProjectItem & { canDelete: boolean }) {

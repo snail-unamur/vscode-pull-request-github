@@ -300,10 +300,9 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 
 		const { title, number, author, isDraft, html_url } = this.pullRequestModel;
 
-		const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.riskCategory} - ` : '';
-		const prefixedTitle = `${sizeCategoryPrefix}${this.pullRequestModel.title}`;
+		const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `[${this.pullRequestModel.riskCategory}]` : '';
 
-		const labelTitle = this.pullRequestModel.title.length > 50 ? `${prefixedTitle.substring(0, 50)}...` : prefixedTitle;
+		const labelTitle = this.pullRequestModel.title.length > 50 ? `${this.pullRequestModel.title.substring(0, 50)}...` : this.pullRequestModel.title;
 		const login = author.specialDisplayName ?? author.login;
 
 		const hasNotification = this._notificationProvider.hasNotification(this.pullRequestModel);
@@ -319,7 +318,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			labelPrefix += `#${formattedPRNumber}: `;
 		}
 
-		const label = `${labelPrefix}${isDraft ? '[DRAFT] ' : ''}${labelTitle}`;
+		const label = `${sizeCategoryPrefix} ${labelPrefix}${isDraft ? '[DRAFT] ' : ''}${labelTitle}`;
 		const description = `by @${login}`;
 		const command = {
 			title: vscode.l10n.t('View Pull Request Description'),

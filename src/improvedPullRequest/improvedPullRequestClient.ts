@@ -32,7 +32,7 @@ export class ImprovedPullRequestClient {
         'Improved Pull Request'
       );
 
-      return data.analysis;
+      return data;
     } catch (error) {
       vscode.window.showErrorMessage(
         vscode.l10n.t(`Failed to retreive metrics for PR #${prNumber}`)
@@ -63,9 +63,8 @@ export class ImprovedPullRequestClient {
       const data = await query.json();
 
       data.forEach((pr) => {
-        result.set(pr.prNumber, pr.analysis);
+        result.set(pr.prNumber, pr);
       });
-
       return result;
     } catch (error) {
       throw Error('Failed to retreive metrics for PRs.');
