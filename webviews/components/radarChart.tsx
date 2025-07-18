@@ -69,6 +69,21 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
       legend: {
         display: false,
       },
+      tooltip: {
+        callbacks: {
+          label: function (context) {
+            const name = context.label;
+            const metric = metrics.find(m => m.name === name)
+
+            let label = '';
+            if (context.parsed.r !== null) {
+              label += `${context.parsed.r}: ${metric?.fullName} `;
+            }
+
+            return label;
+          }
+        }
+      }
     },
     scales: {
       r: {

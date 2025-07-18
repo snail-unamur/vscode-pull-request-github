@@ -7,5 +7,7 @@ export type ImprovedPullRequestMetrics = {
 export type Metric = {
     id: string
     name: string,
+    fullName: string,
+    description: string,
 	radarValue: number,
 }

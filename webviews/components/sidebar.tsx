@@ -57,7 +57,7 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					</div>
 					{reviewers && reviewers.length ? (
 						reviewers.map(state => (
-							<Reviewer key={reviewerId(state.reviewer)} {...{reviewState: state}} />
+							<Reviewer key={reviewerId(state.reviewer)} {...{ reviewState: state }} />
 						))
 					) : (
 						<div className="section-placeholder">None yet</div>
@@ -211,14 +211,16 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					<div className="section-placeholder">No milestone</div>
 				)}
 			</div>
-			<div id="metric" className="section">
+
+			<div id="metric" className="section radar">
 				<div className="section-header">
-					<div className="section-title">Metrics</div>
+					<div className="section-title">Risk Overview</div>
 				</div>
-				{pr.analysis ?  (<RadarChartDisplay key={'Radar-chart'} />) : (
-					<div className="section-placeholder">No metric</div>
+				{pr.analysis ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+					<div className="section-placeholder">No graph to show yet</div>
 				)}
 			</div>
+
 		</div>
 	);
 }
