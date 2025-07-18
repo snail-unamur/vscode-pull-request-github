@@ -88,7 +88,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
     scales: {
       r: {
         min: 0,
-        max: 5,
+        max: 4,
         ticks: {
           stepSize: 1,
           display: false,
