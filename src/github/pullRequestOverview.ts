@@ -17,6 +17,7 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
+import { improvedPullRequest } from '../improvedPullRequest/improvedPullRequest';
 import { SessionLogViewManager } from '../view/sessionLogView';
 import { getCopilotApi } from './copilotApi';
 import { FolderRepositoryManager } from './folderRepositoryManager';
@@ -208,7 +209,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 	protected override async updateItem(pullRequestModel: PullRequestModel): Promise<void> {
 		try {
 			const [
-				pullRequest,
+				pullRequestRef,
 				timelineEvents,
 				defaultBranch,
 				status,
@@ -244,11 +245,15 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				this._folderRepositoryManager.getPreferredEmail(pullRequestModel),
 				pullRequestModel.getCoAuthors()
 			]);
-			if (!pullRequest) {
+			if (!pullRequestRef) {
 				throw new Error(
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
 			}
+
+			const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
+			const pullRequest = improvedPullRequest(pullRequestRef, improvedPRClient);
+			await pullRequest.retrieveMetrics();
 
 			this._item = pullRequest;
 			this.registerPrListeners();
@@ -297,6 +302,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
 				isCopilotOnMyBehalf: await isCopilotOnMyBehalf(pullRequest, currentUser, coAuthors)
+				analysis: pullRequest.metrics,
 			};
 			this._postMessage({
 				command: 'pr.initialize',

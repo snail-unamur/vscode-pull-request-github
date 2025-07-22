@@ -593,6 +593,30 @@ body button .icon {
 	background-color: var(--vscode-pullRequests-draft);
 }
 
+.size-badge-A {
+	background-color: var(--vscode-pullRequests-sizeA);
+}
+
+.size-badge-B {
+	background-color: var(--vscode-pullRequests-sizeB);
+}
+
+.size-badge-C {
+	background-color: var(--vscode-pullRequests-sizeC);
+}
+
+.size-badge-D {
+	background-color: var(--vscode-pullRequests-sizeD);
+}
+
+.size-badge-E {
+	background-color: var(--vscode-pullRequests-sizeE);
+}
+
+.size-badge-notfound {
+	background-color: var(--vscode-badge-background);
+}
+
 .section {
 	padding-bottom: 24px;
 	border-bottom: 1px solid var(--vscode-editorWidget-border);
@@ -1243,6 +1267,11 @@ code {
 	/* Hides bottom borders on bottom two sections */
 	.section:nth-last-child(-n + 2) {
 		border-bottom: none;
+	}
+
+	.radar {
+		grid-row: 2 / span 3;
+		grid-column: 2 / 3;
 	}
 }
 

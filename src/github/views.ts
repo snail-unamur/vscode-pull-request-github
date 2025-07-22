@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CommentEvent, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
+import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -99,6 +100,7 @@ export interface PullRequest extends Issue {
 	lastReviewType?: ReviewType;
 	revertable?: boolean;
 	busy?: boolean;
+	analysis: ImprovedPullRequestMetrics;
 }
 
 export interface ProjectItemsReply {

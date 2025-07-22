@@ -15,6 +15,7 @@ import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { CopilotWorkingStatus } from '../../github/githubRepository';
 import { NotificationProvider } from '../../github/notifications';
 import { IResolvedPullRequestModel, PullRequestModel } from '../../github/pullRequestModel';
+import { hasMetrics, isImprovedPullRequest } from '../../improvedPullRequest/improvedPullRequest';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../fileChangeModel';
 import { getInMemPRFileSystemProvider, provideDocumentContentForChangeModel } from '../inMemPRContentProvider';
 import { getIconForeground, getListErrorForeground, getListWarningForeground, getNotebookStatusSuccessIconForeground } from '../theme';
@@ -303,10 +304,14 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		const currentBranchIsForThisPR = this.pullRequestModel.equals(this._folderReposManager.activePullRequest);
 
 		const { title, number, author, isDraft, html_url } = this.pullRequestModel;
+    
+    const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `[${this.pullRequestModel.riskCategory}]` : '';
+
 		let labelTitle = this.pullRequestModel.title.length > 50 ? `${this.pullRequestModel.title.substring(0, 50)}...` : this.pullRequestModel.title;
 		if (COPILOT_ACCOUNTS[this.pullRequestModel.author.login]) {
 			labelTitle = labelTitle.replace('[WIP]', '');
 		}
+    
 		const login = author.specialDisplayName ?? author.login;
 
 		const hasNotification = this._notificationProvider.hasNotification(this.pullRequestModel);
@@ -322,7 +327,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			labelPrefix += `#${formattedPRNumber}: `;
 		}
 
-		const label = `${labelPrefix}${isDraft ? '[DRAFT] ' : ''}${labelTitle}`;
+		const label = `${sizeCategoryPrefix} ${labelPrefix}${isDraft ? '[DRAFT] ' : ''}${labelTitle}`;
 		const description = `by @${login}`;
 		const command = {
 			title: vscode.l10n.t('View Pull Request Description'),
