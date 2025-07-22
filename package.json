@@ -14,6 +14,7 @@
 		"activeComment",
 		"chatParticipantAdditions",
 		"chatParticipantPrivate",
+		"chatSessionsProvider",
 		"codiconDecoration",
 		"codeActionRanges",
 		"commentingRangeHint",
@@ -37,7 +38,7 @@
 	"version": "0.114.0",
 	"publisher": "GitHub",
 	"engines": {
-		"vscode": "^1.102.0"
+		"vscode": "^1.103.0"
 	},
 	"categories": [
 		"Other",
@@ -52,6 +53,7 @@
 		"onFileSystem:newIssue",
 		"onFileSystem:pr",
 		"onFileSystem:githubpr",
+		"onFileSystem:githubcommit",
 		"onFileSystem:review",
 		"onWebviewPanel:pr.codingAgentSessionLogView"
 	],
@@ -81,7 +83,8 @@
 				"name": "githubpr",
 				"fullName": "GitHub Pull Requests",
 				"description": "Chat participant for GitHub Pull Requests extension",
-				"when": "config.githubPullRequests.experimental.chat"
+				"when": "config.githubPullRequests.experimental.chat",
+				"isSticky": true
 			}
 		],
 		"configuration": {
@@ -3279,6 +3282,12 @@
 				{
 					"command": "review.requestChangesOnDotComDescription",
 					"when": "webviewId == PullRequestOverview && github:reviewCommentMenu && github:reviewCommentRequestChangesOnDotCom"
+				}
+			],
+			"chat/chatSessions": [
+				{
+					"command": "pr.openDescription",
+					"when": "chatSessionType == copilot-swe-agent"
 				}
 			]
 		},
