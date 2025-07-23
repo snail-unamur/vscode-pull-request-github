@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CommentEvent, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
+import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
@@ -28,6 +28,8 @@ export enum ReviewType {
 }
 
 export interface Issue {
+	owner: string;
+	repo: string;
 	number: number;
 	title: string;
 	titleHTML: string;
@@ -140,4 +142,15 @@ export enum PreReviewState {
 
 export interface CancelCodingAgentReply {
 	events: TimelineEvent[];
+}
+
+export interface OverviewContext {
+	'preventDefaultContextMenuItems': true;
+	owner: string;
+	repo: string;
+	number: number;
+}
+
+export interface CodingAgentContext extends SessionLinkInfo {
+	'preventDefaultContextMenuItems': true;
 }
