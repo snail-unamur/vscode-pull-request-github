@@ -594,23 +594,23 @@ body button .icon {
 }
 
 .size-badge-A {
-	background-color: var(--vscode-pullRequests-sizeA);
+	background-color: var(--vscode-improvedPullRequests-colorRiskA);
 }
 
 .size-badge-B {
-	background-color: var(--vscode-pullRequests-sizeB);
+	background-color: var(--vscode-improvedPullRequests-colorRiskB);
 }
 
 .size-badge-C {
-	background-color: var(--vscode-pullRequests-sizeC);
+	background-color: var(--vscode-improvedPullRequests-colorRiskC);
 }
 
 .size-badge-D {
-	background-color: var(--vscode-pullRequests-sizeD);
+	background-color: var(--vscode-improvedPullRequests-colorRiskD);
 }
 
 .size-badge-E {
-	background-color: var(--vscode-pullRequests-sizeE);
+	background-color: var(--vscode-improvedPullRequests-colorRiskE);
 }
 
 .size-badge-notfound {

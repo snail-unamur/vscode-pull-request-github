@@ -3373,54 +3373,54 @@
 				"description": "The color used for indicating a notification on a pull request"
 			},
 			{
-				"id": "pullRequests.sizeA",
+				"id": "improvedPullRequests.colorRiskA",
 				"defaults": {
-					"dark": "issues.open",
-					"light": "issues.open",
+					"dark": "#3FB950",
+					"light": "#3FB950",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pul request has a size of category A."
+				"description": "The color used for indicating that a pull request has a risk of category A."
 			},
 			{
-				"id": "pullRequests.sizeB",
+				"id": "improvedPullRequests.colorRiskB",
 				"defaults": {
-					"dark": "#FFFF00",
-					"light": "#FFFF00",
+					"dark": "#E67E22",
+					"light": "#E67E22",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pul request has a size of category B."
+				"description": "The color used for indicating that a pull request has a risk of category B."
 			},
 			{
-				"id": "pullRequests.sizeC",
+				"id": "improvedPullRequests.colorRiskC",
 				"defaults": {
-					"dark": "#FF8000",
-					"light": "#FF8000",
+					"dark": "#cb2431",
+					"light": "#cb2431",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pul request has a size of category C."
+				"description": "The color used for indicating that a pull request has a risk of category C."
 			},
 			{
-				"id": "pullRequests.sizeD",
+				"id": "improvedPullRequests.colorRiskD",
 				"defaults": {
-					"dark": "issues.closed",
-					"light": "issues.closed",
+					"dark": "#2874A6",
+					"light": "#2874A6",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pul request has a size of category D."
+				"description": "The color used for indicating that a pull request has a risk of category D."
 			},
 			{
-				"id": "pullRequests.sizeE",
+				"id": "improvedPullRequests.colorRiskE",
 				"defaults": {
-					"dark": "pullRequests.merged",
-					"light": "pullRequests.merged",
+					"dark": "#8957e5",
+					"light": "#8957e5",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pul request has a size of category E."
+				"description": "The color used for indicating that a pull request has a risk of category E."
 			}
 		],
 		"resourceLabelFormatters": [
