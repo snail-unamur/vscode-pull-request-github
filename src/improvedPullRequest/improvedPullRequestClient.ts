@@ -18,28 +18,28 @@ export class ImprovedPullRequestClient {
   ): Promise<ImprovedPullRequestMetrics | undefined> {
     const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
-    try {
-      const query = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${this._token}`,
-        },
-      });
+    const query = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${this._token}`,
+      },
+    });
 
-      const data = await query.json();
+    const data = await query.json();
 
-      Logger.debug(
-        `PR #${prNumber} metrics retrieved.`,
-        'Improved Pull Request'
-      );
-
-      return data;
-    } catch (error) {
+    if (!query.ok) {
       vscode.window.showErrorMessage(
-        vscode.l10n.t(`Failed to retreive metrics for PR #${prNumber}`)
+        vscode.l10n.t(`Failed to retreive metrics for PR #${prNumber}: ${data.message}`)
       );
+
+      return undefined;
     }
 
-    return undefined;
+    Logger.debug(
+      `PR #${prNumber} metrics retrieved.`,
+      'Improved Pull Request'
+    );
+
+    return data;
   }
 
   async retrieveMultipleMetrics(
@@ -51,24 +51,28 @@ export class ImprovedPullRequestClient {
     const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
     const result = new Map();
 
-    try {
-      const query = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${this._token}`,
-        },
-      });
+    const query = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${this._token}`,
+      },
+    });
 
-      Logger.debug('Metrics for PRs retrieved.', 'Improved Pull Request');
+    const data = await query.json();
 
-      const data = await query.json();
+    if (!query.ok) {
+      vscode.window.showErrorMessage(
+        vscode.l10n.t(`Failed to retreive metrics for PRs: ${data.message}`)
+      );
 
-      data.forEach((pr) => {
-        result.set(pr.prNumber, pr);
-      });
       return result;
-    } catch (error) {
-      throw Error('Failed to retreive metrics for PRs.');
     }
+
+    data.forEach((pr) => {
+      result.set(pr.prNumber, pr);
+    });
+
+    Logger.debug('Metrics for PRs retrieved.', 'Improved Pull Request');
+
     return result;
   }
 }

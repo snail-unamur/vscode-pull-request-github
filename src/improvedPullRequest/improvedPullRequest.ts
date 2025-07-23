@@ -32,7 +32,7 @@ export function improvedPullRequest(
 		}
 
 		get risk() {
-			return this._metrics.riskValue;
+			return this._metrics?.riskValue;
 		}
 
 		set metrics(metrics: ImprovedPullRequestMetrics) {
@@ -40,7 +40,7 @@ export function improvedPullRequest(
 		}
 
 		get riskCategory() {
-			return this._metrics.riskCategory;
+			return this._metrics?.riskCategory;
 		}
 
 		compareTo(other: any): number {

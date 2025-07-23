@@ -214,10 +214,10 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 
 			<div id="metric" className="section radar">
 				<div className="section-header">
-					<div className="section-title">Risk Overview</div>
+					<div className="section-title">Risk Chart Overview</div>
 				</div>
-				{pr.analysis ? (<RadarChartDisplay key={'Radar-chart'} />) : (
-					<div className="section-placeholder">No graph to show yet</div>
+				{pr.analysis && pr.analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+					<div className="section-placeholder">No chart yet</div>
 				)}
 			</div>
 
