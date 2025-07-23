@@ -1,85 +1,85 @@
-[![Build Status](https://dev.azure.com/vscode/vscode-pull-request-github/_apis/build/status/vscode-pull-request-github%20%28pr%29?branchName=main)](https://dev.azure.com/vscode/vscode-pull-request-github/_build?definitionId=44&branchName=main)
+> Get a direct overview of Pull Request complexity.
 
-> Review and manage your GitHub pull requests and issues directly in VS Code
+This extension adds functionality to Microsoft's [GitHub Pull Requests](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github&ssr=false) plugin for Visual Studio Code. For more details on the original features and plugin, please visit its [Marketplace page](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github&ssr=false).
 
-This extension allows you to review and manage GitHub pull requests and issues in Visual Studio Code. The support includes:
+# About the Extension
 
-- Authenticating and connecting VS Code to GitHub and GitHub Enterprise.
-- Listing and browsing PRs from within VS Code.
-- Reviewing PRs from within VS Code with in-editor commenting.
-- Validating PRs from within VS Code with easy checkouts.
-- Terminal integration that enables UI and CLIs to co-exist.
-- Listing and browsing issues from within VS Code.
-- Hover cards for "@" mentioned users and for issues.
-- Completion suggestions for users and issues.
-- A "Start working on issue" action which can create a branch for you.
-- Code actions to create issues from "todo" comments.
+This extension is developed and maintained by the **SNAIL Research Laboratory** at the **University of Namur** (Belgium).
+For more information or to get in touch, visit the [SNAIL website](https://snail.info.unamur.be/).
 
-![PR Demo](.readme/demo.gif)
+# Purpose
 
-![Issue Demo](.readme/issueDemo.gif)
+The main goal of the extension is to provide reviewers with a **quick overview of Pull Request complexity**.
+
+Recent research has shown that **cognitive biases** can influence how developers review Pull Requests, which may negatively impact review quality. By offering a visual summary of a Pull Request’s complexity, this extension aims to:
+
+- Raise awareness about complexity before review
+- Help reviewers make more informed decisions
+- Improve the overall quality of code reviews
+
+# Key Features
+
+To achieve this goal, the extension introduces two main features:
+
+1. `Fit For Me` Pull Request Category
+
+   Pull Requests are automatically sorted into a new category called **"Fit For Me"**, based on their **total risk score**.
+   This score is determined using the **worst metric value** among several indicators, graded from **'A' (lowest risk)** to **'E' (highest risk)**.
+
+   ![Fit For Me Category](.readme/fitForMe.png)
+
+2. Radar Chart Visualization
+
+   Each Pull Request overview includes a **radar chart** displaying the calculated complexity metrics.
+
+   - The radar chart consists of **five rings**, labeled from **'A' (center)** to **'E' (outer ring)**.
+   - Each axis of the chart represents a different metric.
+   - The chart gives reviewers an immediate, visual understanding of the Pull Request’s complexity profile.
+
+   ![Radar Chart](.readme/radarChart.png)
 
 # Getting Started
 
-It's easy to get started with GitHub Pull Requests for Visual Studio Code. Simply follow these steps to get started.
+This extension relies on a **backend API** that analyzes Pull Requests and computes complexity metrics.
+To set up the server, please visit the [analysis server repository](https://github.com/snail-unamur/analyse-pull-request-server).
 
-1. Install the extension from within VS Code or download it from [the marketplace](https://aka.ms/vscodepr-download).
-1. Open your desired GitHub repository in VS Code.
-1. A new viewlet will appear on the activity bar which shows a list of pull requests and issues.
-1. Use the button on the viewlet to sign in to GitHub.
-1. You may need to configure the `githubPullRequests.remotes` setting, by default the extension will look for PRs for `origin` and `upstream`. If you have different remotes, add them to the remotes list.
-1. You should be good to go!
+## Steps to Set Up
 
-Check out https://www.youtube.com/watch?v=LdSwWxVzUpo for additional getting started tips!
+1. **Install and configure the original GitHub Pull Requests plugin**
+   Follow the setup instructions provided by Microsoft on the [plugin's Marketplace page](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github&ssr=false).
 
-# Configuring the extension
+2. **Configure the analysis server URL**
+   In the extension settings, locate the field called **`Improved Pull Requests: Server URL`** and enter the URL of your analysis server.
 
-There are several settings that can be used to configure the extension.
+You're now ready to go! 🎉
 
-As mentioned above, `githubPullRequests.remotes` is used to specify what remotes the extension should try to fetch pull requests from.
+# Configuring the Extension
 
-To customize the pull request tree, you can use the `githubPullRequests.queries` setting. This setting is a list of labels and search queries which populate the categories of the tree. By default, these queries are "Waiting For My Review", "Assigned To Me", and "Created By Me". An example of adding a "Mentioned Me" category is to change the setting to the following:
+The configuration of complexity metrics is handled by the **analysis server**.
+For more details on how to configure the metrics or customize the analysis, please refer to the [analysis server repository](https://github.com/snail-unamur/analyse-pull-request-server).
 
-```
-"githubPullRequests.queries": [
-	{
-		"label": "Waiting For My Review",
-		"query": "is:open review-requested:${user}"
-	},
-	{
-		"label": "Assigned To Me",
-		"query": "is:open assignee:${user}"
-	},
-	{
-		"label": "Created By Me",
-		"query": "is:open author:${user}"
-	},
-	{
-		"label": "Mentioned Me",
-		"query": "is:open mentions:${user}"
-	}
-]
-```
+For information on configuring the original GitHub Pull Requests plugin, visit the [plugin's main page](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github&ssr=false).
 
-Similarly, there is a setting to configure your issues queries: `githubIssues.queries`.
+All settings added by this extension are labeled with **"Improved Pull Requests"** in the Visual Studio Code settings panel.
 
-Queries use [GitHub search syntax](https://help.github.com/en/articles/understanding-the-search-syntax).
+# Architecture of the Extension
 
-To view additional settings for the extension, you can open VS Code settings and search for "github pull requests".
+The functionality added by this extension is implemented in the `src/improvedPullRequest/` folder.
+This folder contains the following core components:
 
-# Issues
+- **`improvedPullRequest`**
+  A proxy of the original Pull Request model. It adds metrics information without modifying the original logic.
 
-This extension is still in development, so please refer to our [issue tracker for known issues](https://github.com/Microsoft/vscode-pull-request-github/issues), and please contribute with additional information if you encounter an issue yourself.
+- **`improvedPullRequestClient`**
+  A client module responsible for communicating with the analysis server and retrieving complexity metrics for Pull Requests.
 
-## Questions? Authentication? GitHub Enterprise?
+- **`improvedPullRequestMetrics`**
+  An interface defining the structure of the metrics information added to the original Pull Request model.
 
-See our [wiki](https://github.com/Microsoft/vscode-pull-request-github/wiki) for our FAQ.
+- **`sorteablePullRequests`**
+  A helper object that retrieves metrics for multiple Pull Requests and sorts them based on their **worst risk value**.
 
-## Contributing
+Since the analysis server requires a GitHub access token to retrieve Pull Request data, the `improvedPullRequestClient` uses the **same access token** stored by the original GitHub Pull Requests plugin.
+For security, the client is created and managed using the **credentials class**, following the same mechanism as the original plugin.
 
-If you're interested in contributing, or want to explore the source code of this extension yourself, see our [contributing guide](https://github.com/Microsoft/vscode-pull-request-github/wiki/Contributing), which includes:
-
-- [How to Build and Run](https://github.com/Microsoft/vscode-pull-request-github/wiki/Contributing#build-and-run)
-- [Architecture](https://github.com/Microsoft/vscode-pull-request-github/wiki/Contributing#architecture)
-- [Making Pull Requests](https://github.com/Microsoft/vscode-pull-request-github/wiki/Contributing#pull-requests)
-- [Code of Conduct](https://github.com/Microsoft/vscode-pull-request-github/wiki/Contributing#code-of-conduct)
+The radar chart visualization is implemented in the `webviews/components/radarChart.tsx` file. It is integrated into the Pull Request sidebar UI via the `webviews/components/sidebar.tsx` file.

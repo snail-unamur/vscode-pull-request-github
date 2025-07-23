@@ -90,3 +90,7 @@ export const COLOR_THEME = 'colorTheme';
 export const CODING_AGENT = `${PR_SETTINGS_NAMESPACE}.codingAgent`;
 export const CODING_AGENT_ENABLED = 'enabled';
 export const CODING_AGENT_AUTO_COMMIT_AND_PUSH = 'autoCommitAndPush';
+
+// Pull Request Improved
+export const IMPROVED_PULL_REQUEST_NAMESPACE = 'improvedPullRequests';
+export const METRIC_SERVER_URL = 'serverURL';
