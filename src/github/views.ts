@@ -27,6 +27,10 @@ export enum ReviewType {
 	RequestChanges = 'requestChanges',
 }
 
+export interface DisplayLabel extends ILabel {
+	displayName: string;
+}
+
 export interface Issue {
 	owner: string;
 	repo: string;
@@ -40,7 +44,7 @@ export interface Issue {
 	author: IAccount;
 	state: GithubItemStateEnum; // TODO: don't allow merged
 	events: TimelineEvent[];
-	labels: ILabel[];
+	labels: DisplayLabel[];
 	assignees: IAccount[];
 	projectItems: IProjectItem[] | undefined;
 	milestone: IMilestone | undefined;
