@@ -14,6 +14,7 @@ import { CheckState, PRType, PullRequestChecks, PullRequestReviewRequirement } f
 import { PullRequestModel } from '../github/pullRequestModel';
 import { RepositoriesManager } from '../github/repositoriesManager';
 import { UnsatisfiedChecks } from '../github/utils';
+import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
 
@@ -38,7 +39,7 @@ export class PrsTreeModel extends Disposable {
 	// Key is identifier from createPRNodeUri
 	private readonly _queriedPullRequests: Map<string, PRStatusChange> = new Map();
 
-	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All, ItemsResponseResult<PullRequestModel>>> = new Map();
+	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, ItemsResponseResult<PullRequestModel>>> = new Map();
 	private readonly _repoEvents: Map<FolderRepositoryManager, vscode.Disposable[]> = new Map();
 
 	constructor(private _telemetry: ITelemetry, private readonly _reposManager: RepositoriesManager, private readonly _context: vscode.ExtensionContext) {
@@ -206,7 +207,7 @@ export class PrsTreeModel extends Disposable {
 		this._onDidChangePrStatus.fire(changedStatuses);
 	}
 
-	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All, ItemsResponseResult<PullRequestModel>> {
+	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, ItemsResponseResult<PullRequestModel>> {
 		let cache = this._cachedPRs.get(folderRepoManager);
 		if (!cache) {
 			cache = new Map();
@@ -300,6 +301,43 @@ export class PrsTreeModel extends Disposable {
 				}
 			}
 		}
+  }
+
+  async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
+		const cache = this.getFolderCache(folderRepoManager);
+		if (!update && cache.has(PRType.ImprovePR) && !fetchNextPage) {
+			return cache.get(PRType.ImprovePR)!;
+		}
+
+
+		// FIXME : nothing garantue that will have the right PR because of the batch caching
+		const prs = await folderRepoManager.getPullRequests(
+			PRType.All,
+			{ fetchNextPage }
+		);
+
+		const improvedPRClient = folderRepoManager.improvedPRClient;
+		const sorteablePullRequests = new SorteablePullRequests(prs.items, improvedPRClient);
+		const sortedPrs = await sorteablePullRequests.getSortedPullRequests();
+		const newItemResponse = {
+			items: sortedPrs,
+			hasMorePages: prs.hasMorePages,
+			hasUnsearchedRepositories: prs.hasUnsearchedRepositories,
+			totalCount: prs.totalCount
+		};
+
+		cache.set(PRType.ImprovePR, newItemResponse);
+
+		/* __GDPR__
+			"pr.expand.all" : {}
+		*/
+
+		// Not useful for now
+		// this._telemetry.sendTelemetryEvent('pr.expand.all');
+		// Don't await this._getChecks. It fires an event that will be listened to.
+		this._getChecks(newItemResponse.items);
+		this.hasLoaded = true;
+		return newItemResponse;
 	}
 
 	override dispose() {
