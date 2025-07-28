@@ -261,9 +261,23 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 
 function RadarChartDisplay() {
 	const { pr } = useContext(PullRequestContext);
+	const loc = pr.analysis.defaultMetrics.find(m => m.id === 'ncloc')?.value;
+	const coverage = pr.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
+	const files = pr.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
 
-	return (
+	return (<>
+		<div className="section-placeholder">
+			For <strong>{loc}</strong> modified lines of code
+			{coverage != null && (
+				<>
+					{' with '}
+					<strong>{coverage}%</strong> test coverage
+				</>
+			)}
+			{' '}in <strong>{files}</strong> files
+		</div>
 		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+	</>
 	)
 }
 

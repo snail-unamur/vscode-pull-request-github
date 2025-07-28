@@ -52,7 +52,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
 
     const datasets = [
       {
-        data: metrics.map(m => m.radarValue),
+        data: metrics.map(m => m.value),
         borderColor,
         backgroundColor,
         borderWidth: 1,

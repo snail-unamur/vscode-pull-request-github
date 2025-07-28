@@ -2,6 +2,7 @@ export type ImprovedPullRequestMetrics = {
     riskCategory: string,
     riskValue: number,
     radarMetrics: Metric[],
+    defaultMetrics: Metric[],
 }
 
 export type Metric = {
@@ -9,5 +10,5 @@ export type Metric = {
     name: string,
     fullName: string,
     description: string,
-	radarValue: number,
+	value: number,
 }
