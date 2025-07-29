@@ -12,7 +12,7 @@ import { commands } from '../common/executeCommands';
 import { Disposable } from '../common/lifecycle';
 import Logger from '../common/logger';
 import { GitHubRemote } from '../common/remote';
-import { CODING_AGENT, CODING_AGENT_AUTO_COMMIT_AND_PUSH, CODING_AGENT_ENABLED } from '../common/settingKeys';
+import { CODING_AGENT, CODING_AGENT_AUTO_COMMIT_AND_PUSH, CODING_AGENT_ENABLED, CODING_AGENT_PROMPT_FOR_CONFIRMATION } from '../common/settingKeys';
 import { ITelemetry } from '../common/telemetry';
 import { CommentEvent, CopilotFinishedEvent, CopilotStartedEvent, EventType, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
 import { DataUri, toOpenPullRequestWebviewUri } from '../common/uri';
@@ -59,9 +59,9 @@ const CONTINUE = vscode.l10n.t('Continue');
 // With Pending Changes
 const PUSH_CHANGES = vscode.l10n.t('Include changes');
 const CONTINUE_WITHOUT_PUSHING = vscode.l10n.t('Ignore changes');
+const CONTINUE_AND_DO_NOT_ASK_AGAIN = vscode.l10n.t('Continue and don\'t ask again');
 const COMMIT_YOUR_CHANGES = vscode.l10n.t('Commit your changes to continue coding agent session. Close integrated terminal to cancel.');
 
-const FOLLOW_UP_REGEX = /open-pull-request-webview.*((%7B.*?%7D)|(\{.*?\}))/;
 const COPILOT = '@copilot';
 
 const body_suffix = vscode.l10n.t('Created from VS Code via the [GitHub Pull Request](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github) extension.');
@@ -150,6 +150,11 @@ export class CopilotRemoteAgentManager extends Disposable {
 	enabled(): boolean {
 		return vscode.workspace
 			.getConfiguration(CODING_AGENT).get(CODING_AGENT_ENABLED, false);
+	}
+
+	promptForConfirmation(): boolean {
+		return vscode.workspace
+			.getConfiguration(CODING_AGENT).get(CODING_AGENT_PROMPT_FOR_CONFIRMATION, true);
 	}
 
 	async isAssignable(): Promise<boolean> {
@@ -321,7 +326,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 
 		let autoPushAndCommit = false;
 		const message = vscode.l10n.t('Copilot coding agent will continue your work in \'{0}\'.', repoName);
-		const detail = vscode.l10n.t('Your current chat session will end, and its context will be used to continue your work in a new pull request.');
+		const detail = vscode.l10n.t('Your chat context will be used to continue work in a new pull request.');
 		if (source !== 'prompt' && hasChanges && this.autoCommitAndPushEnabled()) {
 			// Pending changes modal
 			const modalResult = await vscode.window.showInformationMessage(
@@ -353,7 +358,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 			if (modalResult === PUSH_CHANGES) {
 				autoPushAndCommit = true;
 			}
-		} else {
+		} else if (this.promptForConfirmation()) {
 			// No pending changes modal
 			const modalResult = await vscode.window.showInformationMessage(
 				source !== 'prompt' ? message : vscode.l10n.t('Copilot coding agent will implement the specification outlined in this prompt file'),
@@ -362,10 +367,15 @@ export class CopilotRemoteAgentManager extends Disposable {
 					detail: source !== 'prompt' ? detail : undefined
 				},
 				CONTINUE,
+				CONTINUE_AND_DO_NOT_ASK_AGAIN,
 				LEARN_MORE,
 			);
 			if (!modalResult) {
 				return;
+			}
+
+			if (modalResult === CONTINUE_AND_DO_NOT_ASK_AGAIN) {
+				await vscode.workspace.getConfiguration(CODING_AGENT).update(CODING_AGENT_PROMPT_FOR_CONFIRMATION, false, vscode.ConfigurationTarget.Global);
 			}
 
 			if (modalResult === LEARN_MORE) {
@@ -415,7 +425,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 		} else {
 			await this.provideChatSessions(new vscode.CancellationTokenSource().token);
 			if (pr) {
-				vscode.window.showChatSession('copilot-swe-agent', `${pr.id}`, {});
+				vscode.window.showChatSession('copilot-swe-agent', `${pr.number}`, {});
 			}
 		}
 
@@ -738,10 +748,6 @@ export class CopilotRemoteAgentManager extends Disposable {
 				const dateB = new Date(b.last_updated_at ?? b.updated_at ?? 0).getTime();
 				return dateB - dateA;
 			})[0];
-	}
-
-	clearNotifications() {
-		this._stateModel.clearNotifications();
 	}
 
 	get notificationsCount(): number {
@@ -1087,34 +1093,59 @@ export class CopilotRemoteAgentManager extends Disposable {
 		};
 	}
 
-	private async streamNewLogContent(stream: vscode.ChatResponseStream, newLogContent: string): Promise<boolean> {
+	private async streamNewLogContent(stream: vscode.ChatResponseStream, newLogContent: string): Promise<{ hasStreamedContent: boolean; hasSetupStepProgress: boolean }> {
 		try {
 			if (!newLogContent.trim()) {
-				return false;
+				return { hasStreamedContent: false, hasSetupStepProgress: false };
 			}
 
 			// Parse the new log content
 			const logChunks = parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;
+			let hasSetupStepProgress = false;
 
 			for (const chunk of logChunks) {
 				for (const choice of chunk.choices) {
 					const delta = choice.delta;
 
 					if (delta.role === 'assistant') {
-						if (delta.content) {
-							if (!delta.content.startsWith('<pr_title>')) {
-								stream.markdown(delta.content);
-								hasStreamedContent = true;
+						// Handle special case for run_custom_setup_step
+						if (choice.finish_reason === 'tool_calls' && delta.tool_calls?.length && delta.tool_calls[0].function.name === 'run_custom_setup_step') {
+							const toolCall = delta.tool_calls[0];
+							let args: any = {};
+							try {
+								args = JSON.parse(toolCall.function.arguments);
+							} catch {
+								// fallback to empty args
 							}
-						}
 
-						if (delta.tool_calls) {
-							for (const toolCall of delta.tool_calls) {
-								const toolPart = this.createToolInvocationPart(toolCall, delta.content || '');
+							if (delta.content && delta.content.trim()) {
+								// Finished setup step - create/update tool part
+								const toolPart = this.createToolInvocationPart(toolCall, args.name || delta.content);
 								if (toolPart) {
 									stream.push(toolPart);
 									hasStreamedContent = true;
+								}
+							} else {
+								// Running setup step - just track progress
+								hasSetupStepProgress = true;
+								Logger.appendLine(`Setup step in progress: ${args.name || 'Unknown step'}`, CopilotRemoteAgentManager.ID);
+							}
+						} else {
+							if (delta.content) {
+								if (!delta.content.startsWith('<pr_title>')) {
+									stream.markdown(delta.content);
+									hasStreamedContent = true;
+								}
+							}
+
+							if (delta.tool_calls) {
+								for (const toolCall of delta.tool_calls) {
+									const toolPart = this.createToolInvocationPart(toolCall, delta.content || '');
+									if (toolPart) {
+										stream.push(toolPart);
+										hasStreamedContent = true;
+									}
 								}
 							}
 						}
@@ -1129,13 +1160,15 @@ export class CopilotRemoteAgentManager extends Disposable {
 
 			if (hasStreamedContent) {
 				Logger.appendLine(`Streamed content (markdown or tool parts), progress should be cleared`, CopilotRemoteAgentManager.ID);
+			} else if (hasSetupStepProgress) {
+				Logger.appendLine(`Setup step progress detected, keeping progress indicator`, CopilotRemoteAgentManager.ID);
 			} else {
 				Logger.appendLine(`No actual content streamed, progress may still be showing`, CopilotRemoteAgentManager.ID);
 			}
-			return hasStreamedContent;
+			return { hasStreamedContent, hasSetupStepProgress };
 		} catch (error) {
 			Logger.error(`Error streaming new log content: ${error}`, CopilotRemoteAgentManager.ID);
-			return false;
+			return { hasStreamedContent: false, hasSetupStepProgress: false };
 		}
 	}
 
@@ -1186,8 +1219,8 @@ export class CopilotRemoteAgentManager extends Disposable {
 					if (sessionInfo.state !== 'in_progress') {
 						if (logs.length > lastProcessedLength) {
 							const newLogContent = logs.slice(lastProcessedLength);
-							const didStreamContent = await this.streamNewLogContent(stream, newLogContent);
-							if (didStreamContent) {
+							const streamResult = await this.streamNewLogContent(stream, newLogContent);
+							if (streamResult.hasStreamedContent) {
 								hasActiveProgress = false;
 							}
 						}
@@ -1199,12 +1232,15 @@ export class CopilotRemoteAgentManager extends Disposable {
 					if (logs.length > lastLogLength) {
 						Logger.appendLine(`New logs detected, attempting to stream content`, CopilotRemoteAgentManager.ID);
 						const newLogContent = logs.slice(lastProcessedLength);
-						const didStreamContent = await this.streamNewLogContent(stream, newLogContent);
+						const streamResult = await this.streamNewLogContent(stream, newLogContent);
 						lastProcessedLength = logs.length;
 
-						if (didStreamContent) {
+						if (streamResult.hasStreamedContent) {
 							Logger.appendLine(`Content was streamed, resetting hasActiveProgress to false`, CopilotRemoteAgentManager.ID);
 							hasActiveProgress = false;
+						} else if (streamResult.hasSetupStepProgress) {
+							Logger.appendLine(`Setup step progress detected, keeping progress active`, CopilotRemoteAgentManager.ID);
+							// Keep hasActiveProgress as is, don't reset it
 						} else {
 							Logger.appendLine(`No content was streamed, keeping hasActiveProgress as ${hasActiveProgress}`, CopilotRemoteAgentManager.ID);
 						}
@@ -1348,23 +1384,49 @@ export class CopilotRemoteAgentManager extends Disposable {
 					const delta = choice.delta;
 
 					if (delta.role === 'assistant') {
-						if (delta.content) {
-							if (!delta.content.startsWith('<pr_title>')) {
-								currentResponseContent += delta.content;
-							}
-						}
-
-						if (delta.tool_calls) {
-							// Add any accumulated content as markdown first
-							if (currentResponseContent.trim()) {
-								responseParts.push(new vscode.ChatResponseMarkdownPart(currentResponseContent.trim()));
-								currentResponseContent = '';
+						// Handle special case for run_custom_setup_step
+						if (choice.finish_reason === 'tool_calls' && delta.tool_calls?.length && delta.tool_calls[0].function.name === 'run_custom_setup_step') {
+							const toolCall = delta.tool_calls[0];
+							let args: any = {};
+							try {
+								args = JSON.parse(toolCall.function.arguments);
+							} catch {
+								// fallback to empty args
 							}
 
-							for (const toolCall of delta.tool_calls) {
-								const toolPart = this.createToolInvocationPart(toolCall, delta.content || '');
+							// Ignore if delta.content is empty/undefined (running state)
+							if (delta.content && delta.content.trim()) {
+								// Add any accumulated content as markdown first
+								if (currentResponseContent.trim()) {
+									responseParts.push(new vscode.ChatResponseMarkdownPart(currentResponseContent.trim()));
+									currentResponseContent = '';
+								}
+
+								const toolPart = this.createToolInvocationPart(toolCall, args.name || delta.content);
 								if (toolPart) {
 									responseParts.push(toolPart);
+								}
+							}
+							// Skip if content is empty (running state)
+						} else {
+							if (delta.content) {
+								if (!delta.content.startsWith('<pr_title>')) {
+									currentResponseContent += delta.content;
+								}
+							}
+
+							if (delta.tool_calls) {
+								// Add any accumulated content as markdown first
+								if (currentResponseContent.trim()) {
+									responseParts.push(new vscode.ChatResponseMarkdownPart(currentResponseContent.trim()));
+									currentResponseContent = '';
+								}
+
+								for (const toolCall of delta.tool_calls) {
+									const toolPart = this.createToolInvocationPart(toolCall, delta.content || '');
+									if (toolPart) {
+										responseParts.push(toolPart);
+									}
 								}
 							}
 						}

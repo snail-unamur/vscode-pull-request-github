@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import MarkdownIt from 'markdown-it';
-import type monacoType from 'monaco-editor';
+import type { languages as monacoLanguages } from 'monaco-editor/esm/vs/editor/editor.api';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.main';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
@@ -112,6 +112,17 @@ const SessionLog: React.FC<SessionLogProps> = ({ logs }) => {
 		if (choice.delta.role === 'assistant') {
 			if (choice.finish_reason === 'stop' && choice.delta.content.startsWith('<pr_title>')) {
 				return;
+			} if (choice.finish_reason === 'tool_calls' && choice.delta.tool_calls?.length && choice.delta.tool_calls[0].function.name === 'run_custom_setup_step') {
+				const toolCall = choice.delta.tool_calls[0];
+				const args = JSON.parse(toolCall.function.arguments);
+
+				return (
+					<CodeView
+						key={`setup-steps-${index}`}
+						label={args.name || 'Setup Step'}
+						content={{ value: choice.delta.content, lang: 'markdown' }}
+					/>
+				);
 			} else {
 				// For markdown content, use a custom renderer component
 				return (
@@ -260,7 +271,7 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => {
 };
 
 function getLanguageForResource(filePath: string): string | undefined {
-	const langs = (monaco.languages as typeof monacoType.languages).getLanguages();
+	const langs = (monaco.languages as typeof monacoLanguages).getLanguages();
 	for (const lang of langs) {
 		if (lang.extensions && lang.extensions.some(ext => filePath.endsWith(ext))) {
 			return lang.id;
