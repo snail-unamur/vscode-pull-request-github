@@ -1,5 +1,4 @@
 export type ImprovedPullRequestMetrics = {
-    riskCategory: string,
     riskValue: number,
     radarMetrics: Metric[],
     defaultMetrics: Metric[],

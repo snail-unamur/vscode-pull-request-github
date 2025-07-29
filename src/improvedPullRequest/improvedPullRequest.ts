@@ -16,7 +16,6 @@ export type ImprovedPullRequestType = PullRequestModel & {
 	retrieveMetrics(): Promise<void>;
 	compareTo(other: any): number;
 	metrics: ImprovedPullRequestMetrics;
-	riskCategory: string;
 	risk: number;
 };
 
@@ -37,10 +36,6 @@ export function improvedPullRequest(
 
 		set metrics(metrics: ImprovedPullRequestMetrics) {
 			this._metrics = metrics;
-		}
-
-		get riskCategory() {
-			return this._metrics?.riskCategory;
 		}
 
 		compareTo(other: any): number {

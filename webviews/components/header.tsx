@@ -225,8 +225,8 @@ function Subtitle({ state, isDraft, isIssue, author, base, head, codingAgentEven
 				<span>{text}</span>
 			</div>
 			{ analysis ?
-			<div id="status" className={`size-badge-${analysis.riskCategory}`}>
-				<span>Risk category {analysis.riskCategory}</span>
+			<div id="status" className={`size-badge-A`}>
+				<span>Risk value {analysis.riskValue}</span>
 			</div> : <div id="status" className={`size-badge-notfound`}>
 				<span>No risk category retreived</span>
 			</div>
