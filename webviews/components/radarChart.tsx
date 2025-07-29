@@ -98,6 +98,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
         },
         grid: {
           color: themeColor,
+          circular: true,
         },
         pointLabels: {
           color: textColor,
