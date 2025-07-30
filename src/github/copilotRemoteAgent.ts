@@ -779,6 +779,8 @@ export class CopilotRemoteAgentManager extends Disposable {
 				return [];
 			}
 
+			await this.waitRepoManagerInitialization();
+
 			const codingAgentPRs = await capi.getAllCodingAgentPRs(this.repositoriesManager);
 			return await Promise.all(codingAgentPRs.map(async session => {
 				const timeline = await session.getTimelineEvents(session);
@@ -1046,7 +1048,7 @@ export class CopilotRemoteAgentManager extends Disposable {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
 		} else if (session.state === 'in_progress') {
 			// For in-progress sessions without logs, create a placeholder response
-			const placeholderParts = [new vscode.ChatResponseMarkdownPart('Session is initializing...')];
+			const placeholderParts = [new vscode.ChatResponseProgressPart('Session is initializing...')];
 			const responseResult: vscode.ChatResult = {};
 			return new vscode.ChatResponseTurn2(placeholderParts, responseResult, 'copilot-swe-agent');
 		} else {
@@ -1184,20 +1186,41 @@ export class CopilotRemoteAgentManager extends Disposable {
 		const pollingInterval = 3000; // 3 seconds
 
 		return new Promise<void>((resolve, reject) => {
+			let cancellationListener: vscode.Disposable | undefined;
+			let isCompleted = false;
+
 			const complete = async () => {
+				if (isCompleted) {
+					return;
+				}
+				isCompleted = true;
+				cancellationListener?.dispose();
+
 				const multiDiffPart = await this.getFileChangesMultiDiffPart(pullRequest);
 				if (multiDiffPart) {
 					stream.push(multiDiffPart);
 				}
 
-				stream.push(new vscode.ChatResponseCommandButtonPart({
-					title: vscode.l10n.t('Open Changes'),
-					command: 'pr.openChanges',
-					arguments: [pullRequest]
-				}));
-
 				resolve();
 			};
+
+			cancellationListener = token.onCancellationRequested(async () => {
+				if (isCompleted) {
+					return;
+				}
+
+				try {
+					const sessionInfo = await capi.getSessionInfo(sessionId);
+					if (sessionInfo && sessionInfo.state !== 'completed' && sessionInfo.workflow_run_id) {
+						await pullRequest.githubRepository.cancelWorkflow(sessionInfo.workflow_run_id);
+						stream.markdown(vscode.l10n.t('Session has been cancelled.'));
+						complete();
+					}
+				} catch (error) {
+					Logger.error(`Error while trying to cancel session ${sessionId} workflow: ${error}`, CopilotRemoteAgentManager.ID);
+				}
+			});
+
 			const pollForUpdates = async (): Promise<void> => {
 				try {
 					if (token.isCancellationRequested) {
