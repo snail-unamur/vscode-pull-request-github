@@ -261,9 +261,10 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 
 function RadarChartDisplay() {
 	const { pr } = useContext(PullRequestContext);
-	const loc = pr.analysis.defaultMetrics.find(m => m.id === 'new_lines')?.value;
-	const coverage = pr.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
-	const files = pr.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
+
+	const loc = pr?.analysis.defaultMetrics.find(m => m.id === 'new_lines')?.value;
+	const coverage = pr?.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
+	const files = pr?.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
 
 	return (<>
 		<div className="section-placeholder">
