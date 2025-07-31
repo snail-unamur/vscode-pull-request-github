@@ -1,16 +1,16 @@
-import React, { useMemo } from 'react';
-import { Radar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
   Filler,
-  Tooltip,
   Legend,
+  LineElement,
+  PointElement,
+  RadialLinearScale,
+  Tooltip,
 } from 'chart.js';
-import { Metric } from '../../src/improvedPullRequest/improvedPullRequestMetrics';
 import { hexToRgba } from 'hex-and-rgba/esm';
+import React, { useMemo } from 'react';
+import { Radar } from 'react-chartjs-2';
+import { Metric } from '../../src/improvedPullRequest/improvedPullRequestMetrics';
 
 ChartJS.register(
   RadialLinearScale,
@@ -73,7 +73,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ metrics, isDarkTheme }) => {
         callbacks: {
           label: function (context) {
             const name = context.label;
-            const metric = metrics.find(m => m.name === name)
+            const metric = metrics.find(m => m.name === name);
 
             let label = '';
             if (context.parsed.r !== null) {

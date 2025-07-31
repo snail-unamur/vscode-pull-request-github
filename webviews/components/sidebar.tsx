@@ -12,8 +12,8 @@ import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
-import { Reviewer } from './reviewer';
 import RadarChart from './radarChart';
+import { Reviewer } from './reviewer';
 
 export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot }: PullRequest) {
 	const {
@@ -278,7 +278,7 @@ function RadarChartDisplay() {
 		</div>
 		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
 	</>
-	)
+	);
 }
 
 function Project(project: IProjectItem & { canDelete: boolean }) {
