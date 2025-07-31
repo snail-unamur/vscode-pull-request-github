@@ -156,7 +156,6 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		this._isActive = isActive;
 	}
 
-	_telemetry: ITelemetry;
 
 	constructor(
 		private readonly credentialStore: CredentialStore,
@@ -166,9 +165,8 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		item: PullRequest,
 		isActive?: boolean,
 	) {
-		super(githubRepository, remote, item, true);
+		super(telemetry, githubRepository, remote, item, true);
 
-		this._telemetry = telemetry;
 		this.isActive = !!isActive;
 
 		this._showChangesSinceReview = false;
@@ -394,7 +392,9 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		this._telemetry.sendTelemetryEvent('pr.close');
 		const user = await this.githubRepository.getAuthenticatedUser();
 		this.state = this.stateToStateEnum(ret.data.state);
-		this._onDidChange.fire({ state: true });
+
+		// Fire the event with a delay as GitHub needs some time to propagate the changes, we want to make sure any listeners of the event will get the right info when they query
+		setTimeout(() => this._onDidChange.fire({ state: true }), 1500);
 
 		return {
 			item: convertRESTPullRequestToRawPullRequest(ret.data, this.githubRepository),
