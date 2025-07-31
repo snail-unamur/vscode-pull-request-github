@@ -23,8 +23,7 @@ To achieve this goal, the extension introduces two main features:
 
 1. `Fit For Me` Pull Request Category
 
-   Pull Requests are automatically sorted into a new category called **"Fit For Me"**, based on their **total risk score**.
-   This score is determined using the **worst metric value** among several indicators, graded from **'A' (lowest risk)** to **'E' (highest risk)**.
+   Pull Requests are automatically sorted into a new category called **"Fit For Me"**, based on their **total risk score**. This score is determined using an aggregate formula based on a set of metrics describing the complexity of the Pull Request.
 
    ![Fit For Me Category](.readme/fitForMe.png)
 
@@ -32,7 +31,7 @@ To achieve this goal, the extension introduces two main features:
 
    Each Pull Request overview includes a **radar chart** displaying the calculated complexity metrics.
 
-   - The radar chart consists of **five rings**, labeled from **'A' (center)** to **'E' (outer ring)**.
+   - The radar chart consists of **five rings**, ranging from **the center (indicating lower risk)** to **the outermost ring (indicating higher risk)**.
    - Each axis of the chart represents a different metric.
    - The chart gives reviewers an immediate, visual understanding of the Pull Request’s complexity profile.
 
