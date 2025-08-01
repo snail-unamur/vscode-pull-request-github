@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
+import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -106,6 +107,7 @@ export interface PullRequest extends Issue {
 	revertable?: boolean;
 	busy?: boolean;
 	loadingCommit?: string;
+	analysis: ImprovedPullRequestMetrics;
 }
 
 export interface ProjectItemsReply {

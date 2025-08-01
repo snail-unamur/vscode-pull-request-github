@@ -12,6 +12,7 @@ import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
+import RadarChart from './radarChart';
 import { Reviewer } from './reviewer';
 
 export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot }: PullRequest) {
@@ -56,7 +57,7 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					</div>
 					{reviewers && reviewers.length ? (
 						reviewers.map(state => (
-							<Reviewer key={reviewerId(state.reviewer)} {...{reviewState: state}} />
+							<Reviewer key={reviewerId(state.reviewer)} {...{ reviewState: state }} />
 						))
 					) : (
 						<div className="section-placeholder">None yet</div>
@@ -210,6 +211,16 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					<div className="section-placeholder">No milestone</div>
 				)}
 			</div>
+
+			<div id="metric" className="section radar">
+				<div className="section-header">
+					<div className="section-title">Risk Chart Overview</div>
+				</div>
+				{pr.analysis && pr.analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+					<div className="section-placeholder">No chart yet</div>
+				)}
+			</div>
+
 		</div>
 	);
 }
@@ -245,6 +256,29 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+function RadarChartDisplay() {
+	const { pr } = useContext(PullRequestContext);
+
+	const loc = pr?.analysis.defaultMetrics.find(m => m.id === 'new_lines')?.value;
+	const coverage = pr?.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
+	const files = pr?.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
+
+	return (<>
+		<div className="section-placeholder">
+			For <strong>{loc}</strong> modified lines of code
+			{coverage != null && (
+				<>
+					{' with '}
+					<strong>{coverage}%</strong> test coverage
+				</>
+			)}
+			{' '}in <strong>{files}</strong> files
+		</div>
+		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+	</>
 	);
 }
 
