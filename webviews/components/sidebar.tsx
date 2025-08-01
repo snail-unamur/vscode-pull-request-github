@@ -275,7 +275,7 @@ function RadarChartDisplay() {
 					<strong>{coverage}%</strong> test coverage
 				</>
 			)}
-			{' '}in <strong>{files}</strong> files
+			{' '}in <strong>{files}</strong> files (the analysis is based on the modified files)
 		</div>
 		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
 	</>

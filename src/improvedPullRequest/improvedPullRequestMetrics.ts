@@ -9,5 +9,6 @@ export type Metric = {
     name: string,
     fullName: string,
     description: string,
+    radarValue: number,
 	value: number,
 }
