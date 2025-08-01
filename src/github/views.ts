@@ -106,6 +106,7 @@ export interface PullRequest extends Issue {
 	lastReviewType?: ReviewType;
 	revertable?: boolean;
 	busy?: boolean;
+	loadingCommit?: string;
 	analysis: ImprovedPullRequestMetrics;
 }
 
