@@ -237,6 +237,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				mergeability,
 				emailForCommit,
 				coAuthors,
+				hasReviewDraft
 			] = await Promise.all([
 				this._folderRepositoryManager.resolvePullRequest(
 					pullRequestModel.remote.owner,
@@ -256,7 +257,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				this._folderRepositoryManager.isHeadUpToDateWithBase(pullRequestModel),
 				pullRequestModel.getMergeability(),
 				this._folderRepositoryManager.getPreferredEmail(pullRequestModel),
-				pullRequestModel.getCoAuthors()
+				pullRequestModel.getCoAuthors(),
+				pullRequestModel.validateDraftMode(),
 			]);
 			if (!pullRequestRef) {
 				throw new Error(
@@ -305,6 +307,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				isDraft: pullRequest.isDraft,
 				mergeMethodsAvailability,
 				defaultMergeMethod,
+				hasReviewDraft,
 				autoMerge: pullRequest.autoMerge,
 				allowAutoMerge: pullRequest.allowAutoMerge,
 				autoMergeMethod: pullRequest.autoMergeMethod,
