@@ -618,7 +618,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			})
 			.catch(e => {
 				vscode.window.showErrorMessage(`Unable to merge pull request. ${formatError(e)}`);
-				this._throwError(message, {});
+				this._throwError(message, '');
 			});
 	}
 
@@ -648,7 +648,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			})
 			.catch(e => {
 				vscode.window.showErrorMessage(`Unable to set PR ready for review. ${formatError(e)}`);
-				this._throwError(message, {});
+				this._throwError(message, '');
 			});
 	}
 
