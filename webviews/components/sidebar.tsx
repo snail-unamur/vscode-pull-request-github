@@ -12,6 +12,7 @@ import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
+import RadarChart from './radarChart';
 import { Reviewer } from './reviewer';
 
 function Section({
@@ -227,6 +228,17 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					<Milestone key={milestone.title} {...milestone} canDelete={hasWritePermission} />
 				) : (
 					<div className="section-placeholder">No milestone</div>
+				)}
+			</Section>
+      
+      <Section
+				id="metric"
+				title="Risk Chart Overview"
+				hasWritePermission={hasWritePermission}
+				onHeaderClick={}
+			>
+				{pr.analysis && pr.analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+					<div className="section-placeholder">No chart yet</div>
 				)}
 			</Section>
 		</div>
@@ -469,6 +481,29 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+function RadarChartDisplay() {
+	const { pr } = useContext(PullRequestContext);
+
+	const loc = pr?.analysis.defaultMetrics.find(m => m.id === 'new_lines')?.value;
+	const coverage = pr?.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
+	const files = pr?.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
+
+	return (<>
+		<div className="section-placeholder">
+			For <strong>{loc}</strong> modified lines of code
+			{coverage != null && (
+				<>
+					{' with '}
+					<strong>{coverage}%</strong> test coverage
+				</>
+			)}
+			{' '}in <strong>{files}</strong> files (the analysis is based on the modified files)
+		</div>
+		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+	</>
 	);
 }
 
