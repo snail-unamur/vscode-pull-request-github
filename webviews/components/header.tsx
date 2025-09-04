@@ -214,7 +214,7 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 
 
 function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
-	const { text, color, icon } = getStatus(state, isDraft, isIssue);
+	const { text, color, icon } = getStatus(state, isDraft, isIssue, stateReason);
 	const copilotStatus = copilotEventToStatus(codingAgentEvent);
 	let copilotStatusIcon: JSX.Element | undefined;
 	if (copilotStatus === CopilotPRStatus.Started) {

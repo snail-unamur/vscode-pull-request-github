@@ -22,6 +22,7 @@ function Section({
 	onHeaderClick,
 	children,
 	iconButtonGroup,
+	className
 }: {
 	id: string,
 	title: string,
@@ -29,9 +30,10 @@ function Section({
 	onHeaderClick?: (e?: React.MouseEvent) => void | Promise<void>,
 	children: React.ReactNode,
 	iconButtonGroup?: React.ReactNode,
+	className?: string,
 }) {
 	return (
-		<div id={id} className="section">
+		<div id={id} className={`section ${className ?? ''}`}>
 			<div
 				className={`section-header ${hasWritePermission ? 'clickable' : ''}`}
 				onClick={hasWritePermission ? onHeaderClick : undefined}
@@ -54,7 +56,7 @@ function Section({
 	);
 }
 
-export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot }: PullRequest) {
+export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot, analysis }: PullRequest) {
 	const {
 		addReviewers,
 		addAssignees,
@@ -230,14 +232,15 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					<div className="section-placeholder">No milestone</div>
 				)}
 			</Section>
-      
-      <Section
+
+			<Section
 				id="metric"
 				title="Risk Chart Overview"
 				hasWritePermission={hasWritePermission}
-				onHeaderClick={}
+				onHeaderClick={undefined}
+				className='radar'
 			>
-				{pr.analysis && pr.analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+				{analysis && analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
 					<div className="section-placeholder">No chart yet</div>
 				)}
 			</Section>
@@ -429,7 +432,7 @@ function CollapsedLabel(props: PullRequest) {
 	}
 
 	if (!sections.length) {
-		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, and Milestone' : 'Reviewers, Assignees, Labels, Project, and Milestone'}</span>;
+		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, Milestone and Risk Analysis' : 'Reviewers, Assignees, Labels, Project, Milestone and Risk Analysis'}</span>;
 	}
 
 	return (

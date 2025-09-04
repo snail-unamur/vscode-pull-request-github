@@ -58,18 +58,18 @@ export function improvedPullRequest(
 
 	return new Proxy(pr as ImprovedPullRequestType, {
 		get(target, prop, receiver) {
-			if (prop in decorator) return (decorator as any)[prop];
+			if (Reflect.has(decorator, prop)) return (decorator as any)[prop];
 			return Reflect.get(target, prop, receiver);
 		},
 		set(target, prop, value, receiver) {
-			if (prop in decorator) {
+			if (Reflect.has(decorator, prop)) {
 				(decorator as any)[prop] = value;
 				return true;
 			}
 			return Reflect.set(target, prop, value, receiver);
 		},
 		has(target, prop) {
-			return prop in decorator || prop in target;
+			return Reflect.has(decorator, prop) || Reflect.has(target, prop);
 		},
 	});
 }
