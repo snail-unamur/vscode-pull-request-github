@@ -38,10 +38,19 @@ export interface RemoteAgentJobResponse {
 		html_url: string;
 		number: number;
 	}
+	session_id: string;
 }
 
 export interface ChatSessionWithPR extends vscode.ChatSessionItem {
 	pullRequest: PullRequestModel;
+}
+
+export interface ChatSessionFromSummarizedChat extends vscode.ChatSessionItem {
+	prompt: string;
+	summary?: string;
+	// Cache
+	pullRequest?: PullRequestModel;
+	sessionInfo?: SessionInfo;
 }
 
 export class CopilotApi {
@@ -58,16 +67,25 @@ export class CopilotApi {
 		return 'https://api.githubcopilot.com';
 	}
 
+	private async makeApiCallFullUrl(url: string, init: RequestInit): Promise<Response> {
+		const apiCall = () => fetch(url, init);
+		return this.octokit.call(apiCall);
+	}
+	private async makeApiCall(api: string, init: RequestInit): Promise<Response> {
+		return this.makeApiCallFullUrl(`${this.baseUrl}${api}`, init);
+	}
+
 	async postRemoteAgentJob(
 		owner: string,
 		name: string,
 		payload: RemoteAgentJobPayload,
 	): Promise<RemoteAgentJobResponse> {
 		const repoSlug = `${owner}/${name}`;
-		const apiUrl = `${this.baseUrl}/agents/swe/v0/jobs/${repoSlug}`;
+		const apiUrl = `/agents/swe/v0/jobs/${repoSlug}`;
 		let status: number | undefined;
+		Logger.trace(`postRemoteAgentJob: Posting job to ${apiUrl} with payload: ${JSON.stringify(payload)}`, CopilotApi.ID);
 		try {
-			const response = await fetch(apiUrl, {
+			const response = await this.makeApiCall(apiUrl, {
 				method: 'POST',
 				headers: {
 					'Copilot-Integration-Id': 'copilot-developer-dev',
@@ -144,10 +162,13 @@ export class CopilotApi {
 		if (typeof data.pull_request.number !== 'number') {
 			throw new Error('Invalid pull_request.number in response');
 		}
+		if (typeof data.session_id !== 'string') {
+			throw new Error('Invalid session_id in response');
+		}
 	}
 
 	public async getLogsFromZipUrl(logsUrl: string): Promise<string[]> {
-		const logsZip = await fetch(logsUrl, {
+		const logsZip = await this.makeApiCallFullUrl(logsUrl, {
 			headers: {
 				Authorization: `Bearer ${this.token}`,
 				Accept: 'application/json',
@@ -170,10 +191,10 @@ export class CopilotApi {
 	}
 
 	public async getAllSessions(pullRequestId: number | undefined): Promise<SessionInfo[]> {
-		const response = await fetch(
+		const response = await this.makeApiCall(
 			pullRequestId
-				? `https://api.githubcopilot.com/agents/sessions/resource/pull/${pullRequestId}`
-				: 'https://api.githubcopilot.com/agents/sessions',
+				? `/agents/sessions/resource/pull/${pullRequestId}`
+				: `/agents/sessions`,
 			{
 				headers: {
 					Authorization: `Bearer ${this.token}`,
@@ -205,7 +226,7 @@ export class CopilotApi {
 	}
 
 	public async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-		const response = await fetch(`https://api.githubcopilot.com/agents/sessions/${sessionId}`, {
+		const response = await this.makeApiCall(`/agents/sessions/${sessionId}`, {
 			method: 'GET',
 			headers: {
 				Authorization: `Bearer ${this.token}`,
@@ -220,7 +241,7 @@ export class CopilotApi {
 	}
 
 	public async getLogsFromSession(sessionId: string): Promise<string> {
-		const logsResponse = await fetch(`https://api.githubcopilot.com/agents/sessions/${sessionId}/logs`, {
+		const logsResponse = await this.makeApiCall(`/agents/sessions/${sessionId}/logs`, {
 			method: 'GET',
 			headers: {
 				'Authorization': `Bearer ${this.token}`,
@@ -235,7 +256,7 @@ export class CopilotApi {
 
 	public async getJobBySessionId(owner: string, repo: string, sessionId: string): Promise<JobInfo | undefined> {
 		try {
-			const response = await fetch(`${this.baseUrl}/agents/swe/v0/jobs/${owner}/${repo}/session/${sessionId}`, {
+			const response = await this.makeApiCall(`/agents/swe/v0/jobs/${owner}/${repo}/session/${sessionId}`, {
 				method: 'GET',
 				headers: {
 					'Copilot-Integration-Id': 'copilot-developer-dev',
@@ -278,7 +299,7 @@ export interface SessionInfo {
 	agent_id: number;
 	logs: string;
 	logs_blob_id: string;
-	state: 'completed' | 'in_progress' | 'failed' | (string & {});
+	state: 'completed' | 'in_progress' | 'failed' | 'queued';
 	owner_id: number;
 	repo_id: number;
 	resource_type: string;

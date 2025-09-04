@@ -848,6 +848,8 @@ export async function parseGraphQLPullRequest(
 		reactionCount: graphQLPullRequest.reactions.totalCount,
 		reactions: parseGraphQLReaction(graphQLPullRequest.reactionGroups),
 		commentCount: graphQLPullRequest.comments.totalCount,
+		additions: graphQLPullRequest.additions,
+		deletions: graphQLPullRequest.deletions,
 	};
 	pr.mergeCommitMeta = parseCommitMeta(graphQLPullRequest.baseRepository.mergeCommitTitle, graphQLPullRequest.baseRepository.mergeCommitMessage, pr);
 	pr.squashCommitMeta = parseCommitMeta(graphQLPullRequest.baseRepository.squashMergeCommitTitle, graphQLPullRequest.baseRepository.squashMergeCommitMessage, pr);
@@ -942,6 +944,7 @@ export async function parseGraphQLIssue(issue: GraphQL.Issue, githubRepository: 
 		url: issue.url,
 		number: issue.number,
 		state: issue.state,
+		stateReason: issue.stateReason,
 		body: issue.body,
 		bodyHTML: await transformHtmlUrlsToExtensionUrls(issue.bodyHTML, githubRepository),
 		title: issue.title,

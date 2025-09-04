@@ -4,59 +4,87 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as nodePath from 'path';
+import * as marked from 'marked';
 import vscode from 'vscode';
-import { parseSessionLogs, parseToolCallDetails } from '../../../common/sessionParsing';
+import { parseSessionLogs, parseToolCallDetails, StrReplaceEditorToolData } from '../../../common/sessionParsing';
 import { COPILOT_SWE_AGENT } from '../../common/copilot';
 import Logger from '../../common/logger';
 import { CommentEvent, CopilotFinishedEvent, CopilotStartedEvent, EventType, ReviewEvent, TimelineEvent } from '../../common/timelineEvent';
+import { toOpenPullRequestWebviewUri } from '../../common/uri';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../../view/fileChangeModel';
 import { AssistantDelta, Choice, ToolCall } from '../common';
 import { CopilotApi, SessionInfo } from '../copilotApi';
+import { PlainTextRenderer } from '../markdownUtils';
 import { PullRequestModel } from '../pullRequestModel';
 
 export class ChatSessionContentBuilder {
 	constructor(
 		private loggerId: string,
 		private readonly handler: string,
-		private getChangeModels: () => Promise<(RemoteFileChangeModel | InMemFileChangeModel)[]>
+		private getChangeModels: Promise<(RemoteFileChangeModel | InMemFileChangeModel)[]>
 	) { }
 
 	public async buildSessionHistory(
 		sessions: SessionInfo[],
 		pullRequest: PullRequestModel,
-		capi: CopilotApi
+		capi: CopilotApi,
+		timelineEventsPromise: Promise<TimelineEvent[]>
 	): Promise<Array<vscode.ChatRequestTurn | vscode.ChatResponseTurn2>> {
 		const sortedSessions = sessions.slice().sort((a, b) =>
 			new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 		);
 
+		// Process all sessions concurrently while maintaining order
+		const sessionResults = await Promise.all(
+			sortedSessions.map(async (session, sessionIndex) => {
+				const firstHistoryEntry = async () => {
+					const sessionPrompt = await this.determineSessionPrompt(session, sessionIndex, pullRequest, timelineEventsPromise, capi);
+
+					// Create request turn for this session
+					const sessionRequest = new vscode.ChatRequestTurn2(
+						sessionPrompt,
+						undefined, // command
+						[], // references
+						COPILOT_SWE_AGENT,
+						[], // toolReferences
+						[]
+					);
+					return sessionRequest;
+				};
+				const secondHistoryEntry = async () => {
+					const logs = await capi.getLogsFromSession(session.id);
+					// Create response turn
+					const responseHistory = await this.createResponseTurn(pullRequest, logs, session);
+					return responseHistory;
+				};
+				const [first, second] = await Promise.all([
+					firstHistoryEntry(),
+					secondHistoryEntry(),
+				]);
+
+				return { first, second, sessionIndex };
+			})
+		);
+
 		const history: Array<vscode.ChatRequestTurn | vscode.ChatResponseTurn2> = [];
-		const timelineEvents = await pullRequest.getTimelineEvents(pullRequest);
 
-		Logger.appendLine(`Found ${timelineEvents.length} timeline events`, this.loggerId);
+		// Build history array in the correct order
+		for (const { first, second, sessionIndex } of sessionResults) {
+			history.push(first);
 
-		for (const [sessionIndex, session] of sortedSessions.entries()) {
-			const logs = await capi.getLogsFromSession(session.id);
-			const sessionPrompt = await this.determineSessionPrompt(session, sessionIndex, pullRequest, timelineEvents, capi);
+			if (second) {
+				// if this is the first response, then also add the PR card
+				if (sessionIndex === 0) {
+					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.remote.owner, repo: pullRequest.remote.repositoryName, pullRequestNumber: pullRequest.number });
+					const plaintextBody = marked.parse(pullRequest.body, { renderer: new PlainTextRenderer(), }).trim();
 
-			// Create request turn for this session
-			const sessionRequest = new vscode.ChatRequestTurn2(
-				sessionPrompt,
-				undefined, // command
-				[], // references
-				COPILOT_SWE_AGENT,
-				[], // toolReferences
-				[]
-			);
-			history.push(sessionRequest);
-
-			// Create response turn
-			const responseHistory = await this.createResponseTurn(pullRequest, logs, session);
-			if (responseHistory) {
-				history.push(responseHistory);
+					const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, pullRequest.author.specialDisplayName ?? pullRequest.author.login, `#${pullRequest.number}`);
+					const cardTurn = new vscode.ChatResponseTurn2([card], {}, COPILOT_SWE_AGENT);
+					history.push(cardTurn);
+				}
+				history.push(second);
 			}
 		}
-
 		return history;
 	}
 
@@ -80,7 +108,7 @@ export class ChatSessionContentBuilder {
 		session: SessionInfo,
 		sessionIndex: number,
 		pullRequest: PullRequestModel,
-		timelineEvents: readonly TimelineEvent[],
+		timelineEventsPromise: Promise<TimelineEvent[]>,
 		capi: CopilotApi
 	): Promise<string> {
 		let sessionPrompt = session.name || `Session ${sessionIndex + 1} (ID: ${session.id})`;
@@ -88,7 +116,7 @@ export class ChatSessionContentBuilder {
 		if (sessionIndex === 0) {
 			sessionPrompt = await this.getInitialSessionPrompt(session, pullRequest, capi, sessionPrompt);
 		} else {
-			sessionPrompt = await this.getFollowUpSessionPrompt(sessionIndex, timelineEvents, sessionPrompt);
+			sessionPrompt = await this.getFollowUpSessionPrompt(sessionIndex, timelineEventsPromise, sessionPrompt);
 		}
 
 		// TODO: @rebornix, remove @copilot prefix from session prompt for now
@@ -98,9 +126,11 @@ export class ChatSessionContentBuilder {
 
 	private async getFollowUpSessionPrompt(
 		sessionIndex: number,
-		timelineEvents: readonly TimelineEvent[],
+		timelineEventsPromise: Promise<TimelineEvent[]>,
 		defaultPrompt: string
 	): Promise<string> {
+		const timelineEvents = await timelineEventsPromise;
+		Logger.appendLine(`Found ${timelineEvents.length} timeline events`, this.loggerId);
 		const copilotStartedEvents = timelineEvents
 			.filter((event): event is CopilotStartedEvent => event.event === EventType.CopilotStarted)
 			.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -218,6 +248,11 @@ export class ChatSessionContentBuilder {
 				const titleMatch = jobInfo.problem_statement.match(/TITLE: \s*(.*)/i);
 				if (titleMatch && titleMatch[1]) {
 					prompt = titleMatch[1].trim();
+				} else {
+					const split = jobInfo.problem_statement.split('\n');
+					if (split.length > 0) {
+						prompt = split[0].trim();
+					}
 				}
 				Logger.appendLine(`Session 0: Found problem_statement from Jobs API: ${prompt}`, this.loggerId);
 				return prompt;
@@ -271,7 +306,7 @@ export class ChatSessionContentBuilder {
 		delta: AssistantDelta,
 		choice: Choice,
 		pullRequest: PullRequestModel,
-		responseParts: Array<vscode.ChatResponseMarkdownPart | vscode.ChatToolInvocationPart | vscode.ChatResponseMultiDiffPart>,
+		responseParts: Array<vscode.ChatResponseMarkdownPart | vscode.ChatToolInvocationPart | vscode.ChatResponseMultiDiffPart | vscode.ChatResponseThinkingProgressPart>,
 		currentResponseContent: string,
 	): string {
 		if (delta.role === 'assistant') {
@@ -279,7 +314,7 @@ export class ChatSessionContentBuilder {
 			if (
 				choice.finish_reason === 'tool_calls' &&
 				delta.tool_calls?.length &&
-				delta.tool_calls[0].function.name === 'run_custom_setup_step'
+				(delta.tool_calls[0].function.name === 'run_custom_setup_step' || delta.tool_calls[0].function.name === 'run_setup')
 			) {
 				const toolCall = delta.tool_calls[0];
 				let args: { name?: string } = {};
@@ -305,11 +340,12 @@ export class ChatSessionContentBuilder {
 				// Skip if content is empty (running state)
 			} else {
 				if (delta.content) {
-					if (!delta.content.startsWith('<pr_title>')) {
+					if (!delta.content.startsWith('<pr_title>') && !delta.content.startsWith('<error>')) {
 						currentResponseContent += delta.content;
 					}
 				}
 
+				const isError = delta.content?.startsWith('<error>');
 				if (delta.tool_calls) {
 					// Add any accumulated content as markdown first
 					if (currentResponseContent.trim()) {
@@ -323,13 +359,22 @@ export class ChatSessionContentBuilder {
 							responseParts.push(toolPart);
 						}
 					}
+
+					if (isError) {
+						const toolPart = new vscode.ChatToolInvocationPart('Command', 'command');
+						// Remove <error> at the start and </error> at the end
+						const cleaned = (delta.content ?? '').replace(/^\s*<error>\s*/i, '').replace(/\s*<\/error>\s*$/i, '');
+						toolPart.invocationMessage = cleaned;
+						toolPart.isError = true;
+						responseParts.push(toolPart);
+					}
 				}
 			}
 		}
 		return currentResponseContent;
 	}
 
-	private createToolInvocationPart(pullRequest: PullRequestModel, toolCall: ToolCall, deltaContent: string = ''): vscode.ChatToolInvocationPart | undefined {
+	private createToolInvocationPart(pullRequest: PullRequestModel, toolCall: ToolCall, deltaContent: string = ''): vscode.ChatToolInvocationPart | vscode.ChatResponseThinkingProgressPart | undefined {
 		if (!toolCall.function?.name || !toolCall.id) {
 			return undefined;
 		}
@@ -348,6 +393,10 @@ export class ChatSessionContentBuilder {
 			const toolDetails = parseToolCallDetails(toolCall, deltaContent);
 			toolPart.toolName = toolDetails.toolName;
 
+			if (toolPart.toolName === 'think') {
+				return new vscode.ChatResponseThinkingProgressPart(toolDetails.invocationMessage);
+			}
+
 			if (toolCall.function.name === 'bash') {
 				toolPart.invocationMessage = new vscode.MarkdownString(`\`\`\`bash\n${toolDetails.invocationMessage}\n\`\`\``);
 			} else {
@@ -361,12 +410,12 @@ export class ChatSessionContentBuilder {
 				toolPart.originMessage = new vscode.MarkdownString(toolDetails.originMessage);
 			}
 			if (toolDetails.toolSpecificData) {
-				if ('command' in toolDetails.toolSpecificData) {
+				if (StrReplaceEditorToolData.is(toolDetails.toolSpecificData)) {
 					if ((toolDetails.toolSpecificData.command === 'view' || toolDetails.toolSpecificData.command === 'edit') && toolDetails.toolSpecificData.fileLabel) {
 						const uri = vscode.Uri.file(nodePath.join(pullRequest.githubRepository.rootUri.fsPath, toolDetails.toolSpecificData.fileLabel));
-						toolPart.invocationMessage = new vscode.MarkdownString(`${toolPart.toolName} [](${uri.toString()})`);
+						toolPart.invocationMessage = new vscode.MarkdownString(`${toolPart.toolName} [](${uri.toString()})` + (toolDetails.toolSpecificData?.viewRange ? `, lines ${toolDetails.toolSpecificData.viewRange?.start} to ${toolDetails.toolSpecificData.viewRange?.end}` : ''));
 						toolPart.invocationMessage.supportHtml = true;
-						toolPart.pastTenseMessage = new vscode.MarkdownString(`${toolPart.toolName} [](${uri.toString()})`);
+						toolPart.pastTenseMessage = new vscode.MarkdownString(`${toolPart.toolName} [](${uri.toString()})` + (toolDetails.toolSpecificData?.viewRange ? `, lines ${toolDetails.toolSpecificData.viewRange?.start} to ${toolDetails.toolSpecificData.viewRange?.end}` : ''));
 					}
 				} else {
 					toolPart.toolSpecificData = toolDetails.toolSpecificData;
@@ -383,7 +432,7 @@ export class ChatSessionContentBuilder {
 
 	private async getFileChangesMultiDiffPart(pullRequest: PullRequestModel): Promise<vscode.ChatResponseMultiDiffPart | undefined> {
 		try {
-			const changeModels = await this.getChangeModels();
+			const changeModels = await this.getChangeModels;
 
 			if (changeModels.length === 0) {
 				return undefined;
@@ -391,10 +440,13 @@ export class ChatSessionContentBuilder {
 
 			const diffEntries: vscode.ChatResponseDiffEntry[] = [];
 			for (const changeModel of changeModels) {
+				const { added, removed } = await changeModel.calculateChangedLinesCount();
 				diffEntries.push({
 					originalUri: changeModel.parentFilePath,
 					modifiedUri: changeModel.filePath,
-					goToFileUri: changeModel.filePath
+					goToFileUri: changeModel.filePath,
+					added,
+					removed,
 				});
 			}
 

@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { OpenCommitChangesArgs } from '../../common/views';
 import { openPullRequestOnGitHub } from '../commands';
 import { IComment } from '../common/comment';
-import { COPILOT_LOGINS, copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '../common/copilot';
+import { COPILOT_SWE_AGENT, copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '../common/copilot';
 import { commands, contexts } from '../common/executeCommands';
 import { disposeAll } from '../common/lifecycle';
 import Logger from '../common/logger';
@@ -42,6 +42,7 @@ import { CancelCodingAgentReply, MergeArguments, MergeResult, PullRequest, Revie
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
+	public static override readonly viewType = PULL_REQUEST_OVERVIEW_VIEW_TYPE;
 	/**
 	 * Track the currently panel. Only allow a single panel to exist at a time.
 	 */
@@ -66,7 +67,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		folderRepositoryManager: FolderRepositoryManager,
 		issue: PullRequestModel,
 		toTheSide: boolean = false,
-		preserveFocus: boolean = true
+		preserveFocus: boolean = true,
+		existingPanel?: vscode.WebviewPanel
 	) {
 
 		/* __GDPR__
@@ -74,7 +76,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				"isCopilot" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 			}
 		*/
-		telemetry.sendTelemetryEvent('pr.openDescription', { isCopilot: (issue.author.login === COPILOT_LOGINS[1]) ? 'true' : 'false' });
+		telemetry.sendTelemetryEvent('pr.openDescription', { isCopilot: (issue.author.login === COPILOT_SWE_AGENT) ? 'true' : 'false' });
 
 		const activeColumn = toTheSide
 			? vscode.ViewColumn.Beside
@@ -93,7 +95,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				extensionUri,
 				activeColumn || vscode.ViewColumn.Active,
 				title,
-				folderRepositoryManager
+				folderRepositoryManager,
+				existingPanel
 			);
 		}
 
@@ -129,8 +132,9 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		column: vscode.ViewColumn,
 		title: string,
 		folderRepositoryManager: FolderRepositoryManager,
+		existingPanel?: vscode.WebviewPanel
 	) {
-		super(telemetry, extensionUri, column, title, folderRepositoryManager, PULL_REQUEST_OVERVIEW_VIEW_TYPE, {
+		super(telemetry, extensionUri, column, title, folderRepositoryManager, PullRequestOverviewPanel.viewType, existingPanel, {
 			light: 'resources/icons/pr_webview.svg',
 			dark: 'resources/icons/dark/pr_webview.svg'
 		});
@@ -244,7 +248,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 					pullRequestModel.remote.repositoryName,
 					pullRequestModel.number,
 				),
-				pullRequestModel.getTimelineEvents(pullRequestModel),
+				pullRequestModel.getTimelineEvents(),
 				this._folderRepositoryManager.getPullRequestRepositoryDefaultBranch(pullRequestModel),
 				pullRequestModel.getStatusChecks(),
 				pullRequestModel.getReviewRequests(),
@@ -496,7 +500,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 	}
 
 	protected override _getTimeline(): Promise<TimelineEvent[]> {
-		return this._item.getTimelineEvents(this._item);
+		return this._item.getTimelineEvents();
 	}
 
 	private async openDiff(message: IRequestMessage<{ comment: IComment }>): Promise<void> {
@@ -606,7 +610,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				vscode.commands.executeCommand('pr.refreshList');
 
 				if (!result.merged) {
-					vscode.window.showErrorMessage(`Merging PR failed: ${result.message}`);
+					vscode.window.showErrorMessage(`Merging pull request failed: ${result.message}`);
 				}
 
 				const mergeResult: MergeResult = {
@@ -647,7 +651,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				this._replyMessage(message, result);
 			})
 			.catch(e => {
-				vscode.window.showErrorMessage(`Unable to set PR ready for review. ${formatError(e)}`);
+				vscode.window.showErrorMessage(`Unable to set pull request ready for review. ${formatError(e)}`);
 				this._throwError(message, '');
 			});
 	}

@@ -7,7 +7,7 @@
 import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
 import { COPILOT_ACCOUNTS } from '../common/comment';
-import { COPILOT_LOGINS } from '../common/copilot';
+import { COPILOT_SWE_AGENT } from '../common/copilot';
 import { emojify, ensureEmojis } from '../common/emoji';
 import Logger from '../common/logger';
 import { DataUri } from '../common/uri';
@@ -17,6 +17,29 @@ import { GitHubRepository, TeamReviewerRefreshKind } from './githubRepository';
 import { AccountType, IAccount, ILabel, IMilestone, IProject, isISuggestedReviewer, isITeam, ISuggestedReviewer, ITeam, reviewerId, ReviewState } from './interface';
 import { IssueModel } from './issueModel';
 import { DisplayLabel } from './views';
+
+export async function chooseItem<T>(
+	itemsToChooseFrom: T[],
+	propertyGetter: (itemValue: T) => string,
+	options?: vscode.QuickPickOptions,
+): Promise<T | undefined> {
+	if (itemsToChooseFrom.length === 0) {
+		return undefined;
+	}
+	if (itemsToChooseFrom.length === 1) {
+		return itemsToChooseFrom[0];
+	}
+	interface Item extends vscode.QuickPickItem {
+		itemValue: T;
+	}
+	const items: Item[] = itemsToChooseFrom.map(currentItem => {
+		return {
+			label: propertyGetter(currentItem),
+			itemValue: currentItem,
+		};
+	});
+	return (await vscode.window.showQuickPick(items, options))?.itemValue;
+}
 
 async function getItems<T extends IAccount | ITeam | ISuggestedReviewer>(context: vscode.ExtensionContext, skipList: Set<string>, users: T[], picked: boolean, tooManyAssignable: boolean = false): Promise<(vscode.QuickPickItem & { user?: T })[]> {
 	const alreadyAssignedItems: (vscode.QuickPickItem & { user?: T })[] = [];
@@ -140,7 +163,7 @@ async function getReviewersQuickPickItems(folderRepositoryManager: FolderReposit
 	const assignableUsers: (IAccount | ITeam)[] = [...teamReviewers];
 
 	// Remove the swe agent as it can't do reviews
-	const assignableUsersForRemote = allAssignableUsers[remoteName].filter(user => user.login !== COPILOT_LOGINS[1]);
+	const assignableUsersForRemote = allAssignableUsers[remoteName].filter(user => user.login !== COPILOT_SWE_AGENT);
 	if (assignableUsersForRemote) {
 		assignableUsers.push(...assignableUsersForRemote);
 	}

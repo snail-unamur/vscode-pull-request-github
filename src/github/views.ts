@@ -19,6 +19,7 @@ import {
 	PullRequestReviewRequirement,
 	Reaction,
 	ReviewState,
+	StateReason,
 } from './interface';
 
 export enum ReviewType {
@@ -43,6 +44,7 @@ export interface Issue {
 	bodyHTML?: string;
 	author: IAccount;
 	state: GithubItemStateEnum; // TODO: don't allow merged
+	stateReason?: StateReason;
 	events: TimelineEvent[];
 	labels: DisplayLabel[];
 	assignees: IAccount[];

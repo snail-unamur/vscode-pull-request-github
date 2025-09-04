@@ -190,12 +190,15 @@ export interface Reaction {
 	reactors: readonly string[];
 }
 
+export type StateReason = 'REOPENED' | 'NOT_PLANNED' | 'COMPLETED' | 'DUPLICATE';
+
 export interface Issue {
 	id: number;
 	graphNodeId: string;
 	url: string;
 	number: number;
 	state: string;
+	stateReason?: StateReason;
 	body: string;
 	bodyHTML?: string;
 	title: string;
@@ -236,6 +239,8 @@ export interface PullRequest extends Issue {
 	squashCommitMeta?: { title: string, description: string };
 	suggestedReviewers?: ISuggestedReviewer[];
 	hasComments?: boolean;
+	additions?: number;
+	deletions?: number;
 }
 
 export enum NotificationSubjectType {

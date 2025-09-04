@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 import * as OctokitRest from '@octokit/rest';
 import { Endpoints } from '@octokit/types';
-import type { Uri } from 'vscode';
+import { ChatSessionStatus, Uri } from 'vscode';
 import { Repository } from '../api/api';
+import { CopilotPRStatus } from '../common/copilot';
 import { GitHubRemote } from '../common/remote';
+import { EventType, TimelineEvent } from '../common/timelineEvent';
 import { SessionInfo, SessionSetupStep } from './copilotApi';
 import { FolderRepositoryManager } from './folderRepositoryManager';
 import { GitHubRepository } from './githubRepository';
@@ -97,7 +99,7 @@ export function mergeQuerySchemaWithShared(sharedSchema: Schema, schema: Schema)
 	};
 }
 
-type RemoteAgentSuccessResult = { link: string; state: 'success'; number: number; webviewUri: Uri; llmDetails: string };
+type RemoteAgentSuccessResult = { link: string; state: 'success'; number: number; webviewUri: Uri; llmDetails: string; sessionId: string };
 type RemoteAgentErrorResult = { error: string; state: 'error' };
 export type RemoteAgentResult = RemoteAgentSuccessResult | RemoteAgentErrorResult;
 
@@ -156,4 +158,34 @@ export interface RepoInfo {
 	repository: Repository;
 	ghRepository: GitHubRepository;
 	fm: FolderRepositoryManager;
+}
+
+export function copilotEventToSessionStatus(event: TimelineEvent | undefined): ChatSessionStatus {
+	if (!event) {
+		return ChatSessionStatus.InProgress;
+	}
+
+	switch (event.event) {
+		case EventType.CopilotStarted:
+			return ChatSessionStatus.InProgress;
+		case EventType.CopilotFinished:
+			return ChatSessionStatus.Completed;
+		case EventType.CopilotFinishedError:
+			return ChatSessionStatus.Failed;
+		default:
+			return ChatSessionStatus.InProgress;
+	}
+}
+
+export function copilotPRStatusToSessionStatus(event: CopilotPRStatus): ChatSessionStatus {
+	switch (event) {
+		case CopilotPRStatus.Started:
+			return ChatSessionStatus.InProgress;
+		case CopilotPRStatus.Completed:
+			return ChatSessionStatus.Completed;
+		case CopilotPRStatus.Failed:
+			return ChatSessionStatus.Failed;
+		default:
+			return ChatSessionStatus.InProgress;
+	}
 }

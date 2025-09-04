@@ -332,11 +332,11 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		if (this.isActive) {
 			localHead = repository.state.HEAD?.commit;
 			remoteHead = (await this.githubRepository.getPullRequest(this.number))?.head?.sha;
-			rejectMessage = vscode.l10n.t('The remote head of the PR branch has changed. Please pull the latest changes from the remote branch before approving.');
+			rejectMessage = vscode.l10n.t('The remote head of the pull request branch has changed. Please pull the latest changes from the remote branch before approving.');
 		} else {
 			localHead = this.head?.sha;
 			remoteHead = (await this.githubRepository.getPullRequest(this.number))?.head?.sha;
-			rejectMessage = vscode.l10n.t('The remote head of the PR branch has changed. Please refresh the pull request before approving.');
+			rejectMessage = vscode.l10n.t('The remote head of the pull request branch has changed. Please refresh the pull request before approving.');
 		}
 
 		if (!remoteHead || remoteHead !== localHead) {
@@ -719,9 +719,9 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	/**
 	 * Get the timeline events of a pull request, including comments, reviews, commits, merges, deletes, and assigns.
 	 */
-	async getTimelineEvents(pullRequestModel: PullRequestModel): Promise<TimelineEvent[]> {
+	async getTimelineEvents(): Promise<TimelineEvent[]> {
 		const getTimelineEvents = async () => {
-			Logger.debug(`Fetch timeline events of PR #${pullRequestModel.number} - enter`, PullRequestModel.ID);
+			Logger.debug(`Fetch timeline events of PR #${this.number} - enter`, PullRequestModel.ID);
 			const { query, remote, schema } = await this.githubRepository.ensure();
 			try {
 				const { data } = await query<TimelineEventsResponse>({
@@ -729,7 +729,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 					variables: {
 						owner: remote.owner,
 						name: remote.repositoryName,
-						number: pullRequestModel.number,
+						number: this.number,
 					},
 				});
 
@@ -748,17 +748,17 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			getTimelineEvents(),
 			this.getViewerLatestReviewCommit(),
 			(await this.githubRepository.getAuthenticatedUser()).login,
-			pullRequestModel.getReviewThreads()
+			this.getReviewThreads()
 		]);
 
 
 		const ret = data?.repository?.pullRequest.timelineItems.nodes ?? [];
-		const events = await parseCombinedTimelineEvents(ret, await this.getCopilotTimelineEvents(pullRequestModel, true), this.githubRepository);
+		const events = await parseCombinedTimelineEvents(ret, await this.getCopilotTimelineEvents(this, true), this.githubRepository);
 
 		this.addReviewTimelineEventComments(events, reviewThreads);
-		insertNewCommitsSinceReview(events, latestReviewCommitInfo?.sha, currentUser, pullRequestModel.head);
-		Logger.debug(`Fetch timeline events of PR #${pullRequestModel.number} - done`, PullRequestModel.ID);
-		pullRequestModel.timelineEvents = events;
+		insertNewCommitsSinceReview(events, latestReviewCommitInfo?.sha, currentUser, this.head);
+		Logger.debug(`Fetch timeline events of PR #${this.number} - done`, PullRequestModel.ID);
+		this.timelineEvents = events;
 		return events;
 	}
 
@@ -1193,6 +1193,8 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	}
 
 	private async getRawReviewComments(): Promise<ReviewThread[]> {
+		Logger.debug(`Fetching review comments for PR #${this.number} - enter`, PullRequestModel.ID);
+
 		const { remote, query, schema } = await this.githubRepository.ensure();
 		let after: string | null = null;
 		let hasNextPage = false;
@@ -1214,6 +1216,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 				hasNextPage = data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage;
 				after = data.repository.pullRequest.reviewThreads.pageInfo.endCursor;
 			} while (hasNextPage && reviewThreads.length < 1000);
+			Logger.debug(`Fetching review comments for PR #${this.number} - exit`, PullRequestModel.ID);
 
 			return reviewThreads;
 		} catch (e) {
@@ -1479,6 +1482,26 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		});
 
 		return parsed;
+	}
+
+	async getPatch(): Promise<string> {
+		const githubRepository = this.githubRepository;
+		const { octokit, remote } = await githubRepository.ensure();
+
+		const { data } = await octokit.call(octokit.api.pulls.get, {
+			owner: remote.owner,
+			repo: remote.repositoryName,
+			pull_number: this.number,
+			mediaType: {
+				format: 'diff'
+			}
+		});
+
+		if (typeof data === 'string') {
+			return data;
+		} else {
+			throw new Error('Expected diff data to be a string');
+		}
 	}
 
 	public static async getChangeModels(folderManager: FolderRepositoryManager, pullRequestModel: PullRequestModel): Promise<(RemoteFileChangeModel | InMemFileChangeModel)[]> {

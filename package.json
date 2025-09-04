@@ -57,7 +57,9 @@
 		"onFileSystem:githubpr",
 		"onFileSystem:githubcommit",
 		"onFileSystem:review",
-		"onWebviewPanel:pr.codingAgentSessionLogView"
+		"onWebviewPanel:pr.codingAgentSessionLogView",
+		"onWebviewPanel:IssueOverview",
+		"onWebviewPanel:PullRequestOverview"
 	],
 	"browser": "./dist/browser/extension",
 	"l10n": "./dist/browser/extension",
@@ -74,8 +76,11 @@
 				"type": "copilot-swe-agent",
 				"name": "copilot",
 				"displayName": "GitHub Copilot coding agent",
-				"description": "Chat session for GitHub Copilot coding agent",
-				"when": "config.chat.agentSessionsViewLocation && config.chat.agentSessionsViewLocation != 'disabled'"
+				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"when": "config.chat.agentSessionsViewLocation && config.chat.agentSessionsViewLocation != 'disabled'",
+				"capabilities": {
+					"supportsFileAttachments": true
+				}
 			}
 		],
 		"remoteCodingAgents": [
@@ -416,6 +421,11 @@
 						"description": "%githubPullRequests.ignoredPullRequestBranches.items%"
 					},
 					"description": "%githubPullRequests.ignoredPullRequestBranches.description%"
+				},
+				"githubPullRequests.ignoreSubmodules": {
+					"type": "boolean",
+					"default": false,
+					"description": "%githubPullRequests.ignoreSubmodules.description%"
 				},
 				"githubPullRequests.neverIgnoreDefaultBranch": {
 					"type": "boolean",
@@ -1322,7 +1332,14 @@
 			{
 				"command": "pr.checkoutFromDescription",
 				"title": "%command.pr.checkoutFromDescription.title%",
-				"category": "%command.pull.request.category%"
+				"category": "%command.pull.request.category%",
+				"icon": "$(git-compare)"
+			},
+			{
+				"command": "pr.applyChangesFromDescription",
+				"title": "%command.pr.applyChangesFromDescription.title%",
+				"category": "%command.pull.request.category%",
+				"icon": "$(git-stash-apply)"
 			},
 			{
 				"command": "pr.checkoutOnVscodeDevFromDescription",
@@ -1662,6 +1679,13 @@
 				"icon": "$(sparkle)"
 			},
 			{
+				"command": "issue.assignToCodingAgent",
+				"title": "%command.issue.assignToCodingAgent.title%",
+				"category": "%command.issues.category%",
+				"icon": "$(send-to-remote-agent)",
+				"enablement": "config.githubPullRequests.codingAgent.enabled"
+			},
+			{
 				"command": "issues.configureIssuesViewlet",
 				"title": "%command.issues.configureIssuesViewlet.title%",
 				"category": "%command.issues.category%",
@@ -1739,6 +1763,33 @@
 				"command": "pr.refreshChatSessions",
 				"title": "%command.pr.refreshChatSessions.title%",
 				"icon": "$(refresh)",
+				"category": "%command.pull.request.category%"
+			},
+			{
+				"command": "pr.preferredCodingAgentGitHubRemote",
+				"title": "%command.pr.preferredCodingAgentGitHubRemote.title%",
+				"icon": "$(gear)",
+				"enablement": "github:hasMultipleGitHubRemotes",
+				"category": "%command.pull.request.category%"
+			},
+			{
+				"command": "pr.resetCodingAgentPreferences",
+				"title": "%command.pr.resetCodingAgentPreferences.title%",
+				"category": "%command.pull.request.category%"
+			},
+			{
+				"command": "pr.checkoutChatSessionPullRequest",
+				"title": "%command.pr.checkoutChatSessionPullRequest.title%",
+				"category": "%command.pull.request.category%"
+			},
+			{
+				"command": "pr.closeChatSessionPullRequest",
+				"title": "%command.pr.closeChatSessionPullRequest.title%",
+				"category": "%command.pull.request.category%"
+			},
+			{
+				"command": "pr.cancelCodingAgent",
+				"title": "%command.pr.cancelCodingAgent.title%",
 				"category": "%command.pull.request.category%"
 			}
 		],
@@ -1842,6 +1893,16 @@
 				"view": "notifications:github",
 				"when": "ReposManagerStateContext == RepositoriesLoaded && github:notificationCount == -1",
 				"contents": "%welcome.github.notifications.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-swe-agent",
+				"when": "ReposManagerStateContext == NeedsAuthentication && github:hasGitHubRemotes",
+				"contents": "%welcome.chat.sessions.copilot-swe-agent.login.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-swe-agent",
+				"when": "ReposManagerStateContext != NeedsAuthentication && github:hasGitHubRemotes",
+				"contents": "%welcome.chat.sessions.copilot-swe-agent.startSession.contents%"
 			}
 		],
 		"keybindings": [
@@ -2013,6 +2074,14 @@
 				},
 				{
 					"command": "pr.checkoutFromDescription",
+					"when": "false"
+				},
+				{
+					"command": "pr.applyChangesFromDescription",
+					"when": "false"
+				},
+				{
+					"command": "pr.checkoutChatSessionPullRequest",
 					"when": "false"
 				},
 				{
@@ -2304,6 +2373,10 @@
 					"when": "false"
 				},
 				{
+					"command": "issue.assignToCodingAgent",
+					"when": "false"
+				},
+				{
 					"command": "issue.copyIssueNumber",
 					"when": "false"
 				},
@@ -2482,6 +2555,10 @@
 				{
 					"command": "review.copyPrLink",
 					"when": "github:inReviewMode"
+				},
+				{
+					"command": "pr.preferredCodingAgentGitHubRemote",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -2634,6 +2711,11 @@
 					"command": "pr.refreshChatSessions",
 					"when": "view == workbench.view.chat.sessions.copilot-swe-agent",
 					"group": "navigation@1"
+				},
+				{
+					"command": "pr.preferredCodingAgentGitHubRemote",
+					"when": "github:hasMultipleGitHubRemotes && view == workbench.view.chat.sessions.copilot-swe-agent",
+					"group": "overflow@1"
 				}
 			],
 			"view/item/context": [
@@ -2860,6 +2942,11 @@
 					"command": "issue.chatSuggestFix",
 					"when": "view == issues:github && viewItem =~ /^(link)?(current|continue)?issue/ && github.copilot-chat.activated && config.githubPullRequests.experimental.chat",
 					"group": "issues_1@1"
+				},
+				{
+					"command": "issue.assignToCodingAgent",
+					"when": "view == issues:github && viewItem =~ /^(link)?(current|continue)?issue/ && config.githubPullRequests.codingAgent.enabled",
+					"group": "issues_1@2"
 				},
 				{
 					"command": "issue.copyIssueNumber",
@@ -3378,9 +3465,34 @@
 			],
 			"chat/chatSessions": [
 				{
-					"command": "pr.openDescription",
+					"command": "pr.openChanges",
 					"when": "chatSessionType == copilot-swe-agent",
 					"group": "inline"
+				},
+				{
+					"command": "pr.checkoutChatSessionPullRequest",
+					"when": "chatSessionType == copilot-swe-agent",
+					"group": "context"
+				},
+				{
+					"command": "pr.closeChatSessionPullRequest",
+					"when": "chatSessionType == copilot-swe-agent",
+					"group": "context"
+				},
+				{
+					"command": "pr.cancelCodingAgent",
+					"when": "chatSessionType == copilot-swe-agent",
+					"group": "context"
+				}
+			],
+			"chat/multiDiff/context": [
+				{
+					"command": "pr.checkoutFromDescription",
+					"when": "chatSessionType == copilot-swe-agent"
+				},
+				{
+					"command": "pr.applyChangesFromDescription",
+					"when": "chatSessionType == copilot-swe-agent"
 				}
 			]
 		},
@@ -3408,8 +3520,8 @@
 			{
 				"id": "issues.closed",
 				"defaults": {
-					"dark": "#cb2431",
-					"light": "#cb2431",
+					"dark": "pullRequests.merged",
+					"light": "pullRequests.merged",
 					"highContrast": "editor.foreground",
 					"highContrastLight": "editor.foreground"
 				},
@@ -3448,8 +3560,8 @@
 			{
 				"id": "pullRequests.closed",
 				"defaults": {
-					"dark": "issues.closed",
-					"light": "issues.closed",
+					"dark": "#cb2431",
+					"light": "#cb2431",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
@@ -4086,10 +4198,24 @@
 				],
 				"toolReferenceName": "activePullRequest",
 				"displayName": "%languageModelTools.github-pull-request_activePullRequest.displayName%",
-				"modelDescription": "Get comprehensive information about the active or current GitHub pull request (PR). This includes the PR title, full description, list of changed files, review comments, PR state, and status checks/CI results. For PRs created by Copilot, it also includes the session logs which indicate the development process and decisions made by the coding agent. When asked about the active or current pull request, do this first! Use this tool for any request related to \"current changes,\" \"pull request details,\" \"what changed,\" \"PR status,\" or similar queries even if the user does not explicitly mention \"pull request.\"",
+				"modelDescription": "Get comprehensive information about the active GitHub pull request (PR). The active PR is the one that is currently checked out. This includes the PR title, full description, list of changed files, review comments, PR state, and status checks/CI results. For PRs created by Copilot, it also includes the session logs which indicate the development process and decisions made by the coding agent. When asked about the active or current pull request, do this first! Use this tool for any request related to \"current changes,\" \"pull request details,\" \"what changed,\" \"PR status,\" or similar queries even if the user does not explicitly mention \"pull request.\" When asked to use this tool, ALWAYS use it.",
 				"icon": "$(git-pull-request)",
 				"canBeReferencedInPrompt": true,
 				"userDescription": "%languageModelTools.github-pull-request_activePullRequest.description%",
+				"when": "config.githubPullRequests.experimental.chat"
+			},
+			{
+				"name": "github-pull-request_openPullRequest",
+				"tags": [
+					"github",
+					"pull request"
+				],
+				"toolReferenceName": "openPullRequest",
+				"displayName": "%languageModelTools.github-pull-request_openPullRequest.displayName%",
+				"modelDescription": "Get comprehensive information about the GitHub pull request (PR) which is currently visible, but not necessarily checked out. This includes the PR title, full description, list of changed files, review comments, PR state, and status checks/CI results. For PRs created by Copilot, it also includes the session logs which indicate the development process and decisions made by the coding agent. When asked about the currently open pull request, do this first! Use this tool for any request related to \"pull request details,\" \"what changed,\" \"PR status,\" or similar queries even if the user does not explicitly mention \"pull request.\" When asked to use this tool, ALWAYS use it.",
+				"icon": "$(git-pull-request)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%languageModelTools.github-pull-request_openPullRequest.description%",
 				"when": "config.githubPullRequests.experimental.chat"
 			}
 		]
@@ -4132,7 +4258,7 @@
 		"@types/react-dom": "^16.8.2",
 		"@types/sinon": "7.0.11",
 		"@types/temp": "0.8.34",
-		"@types/vscode": "1.89.0",
+		"@types/vscode": "1.103.0",
 		"@types/webpack-env": "^1.16.0",
 		"@typescript-eslint/eslint-plugin": "6.10.0",
 		"@typescript-eslint/parser": "6.10.0",
@@ -4187,8 +4313,8 @@
 		"webpack-cli": "4.2.0"
 	},
 	"dependencies": {
-		"@octokit/rest": "20.1.2",
-		"@octokit/types": "13.8.0",
+		"@octokit/rest": "22.0.0",
+		"@octokit/types": "14.1.0",
 		"@vscode/codicons": "^0.0.36",
 		"@vscode/extension-telemetry": "0.7.5",
 		"@vscode/prompt-tsx": "^0.3.0-alpha.12",

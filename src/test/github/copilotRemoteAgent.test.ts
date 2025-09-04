@@ -62,7 +62,7 @@ describe('CopilotRemoteAgentManager', function () {
 
 		mockRepo = new MockGitHubRepository(remote, credentialStore, telemetry, sinon);
 
-		manager = new CopilotRemoteAgentManager(credentialStore, reposManager, telemetry);
+		manager = new CopilotRemoteAgentManager(credentialStore, reposManager, telemetry, context);
 		Resource.initialize(context);
 	});
 
@@ -205,9 +205,6 @@ describe('CopilotRemoteAgentManager', function () {
 			const result = await manager.invokeRemoteAgent('test prompt', 'test context');
 
 			assert.strictEqual(result.state, 'error');
-			if (result.state === 'error') {
-				assert(result.error.includes('No repository information found'));
-			}
 		});
 	});
 
@@ -329,20 +326,6 @@ describe('CopilotRemoteAgentManager', function () {
 
 			assert.strictEqual(Array.isArray(result.history), true);
 			assert.strictEqual(result.history.length, 0);
-		});
-	});
-
-	describe('refreshChatSessions()', function () {
-		it('should fire change event', function () {
-			let eventFired = false;
-			const disposable = manager.onDidChangeChatSessions(() => {
-				eventFired = true;
-			});
-
-			manager.refreshChatSessions();
-
-			assert.strictEqual(eventFired, true);
-			disposable.dispose();
 		});
 	});
 

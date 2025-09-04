@@ -6,7 +6,7 @@
 import React, { useContext, useState } from 'react';
 import { copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '../../src/common/copilot';
 import { CopilotStartedEvent, TimelineEvent } from '../../src/common/timelineEvent';
-import { GithubItemStateEnum } from '../../src/github/interface';
+import { GithubItemStateEnum, StateReason } from '../../src/github/interface';
 import { CodingAgentContext, OverviewContext, PullRequest } from '../../src/github/views';
 import PullRequestContext from '../common/context';
 import { useStateProp } from '../common/hooks';
@@ -32,6 +32,7 @@ export function Header({
 	owner,
 	repo,
 	busy,
+	stateReason,
 	analysis
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
@@ -52,7 +53,7 @@ export function Header({
 				owner={owner}
 				repo={repo}
 			/>
-			<Subtitle state={state} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} analysis={analysis} />
+			<Subtitle state={state} stateReason={stateReason} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} analysis={analysis} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -211,7 +212,8 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 	/>;
 }
 
-function Subtitle({ state, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
+
+function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue);
 	const copilotStatus = copilotEventToStatus(codingAgentEvent);
 	let copilotStatusIcon: JSX.Element | undefined;
@@ -325,7 +327,7 @@ const CheckoutButton = ({ isCurrentlyCheckedOut, isIssue, repositoryDefaultBranc
 	/>;
 };
 
-export function getStatus(state: GithubItemStateEnum, isDraft: boolean, isIssue: boolean) {
+export function getStatus(state: GithubItemStateEnum, isDraft: boolean, isIssue: boolean, stateReason: StateReason) {
 	const closed = isIssue ? issueClosedIcon : prClosedIcon;
 	const open = isIssue ? issueIcon : prOpenIcon;
 
@@ -334,7 +336,11 @@ export function getStatus(state: GithubItemStateEnum, isDraft: boolean, isIssue:
 	} else if (state === GithubItemStateEnum.Open) {
 		return isDraft ? { text: 'Draft', color: 'draft', icon: prDraftIcon } : { text: 'Open', color: 'open', icon: open };
 	} else {
-		return { text: 'Closed', color: 'closed', icon: closed };
+		let closedColor: string = 'closed';
+		if (isIssue) {
+			closedColor = stateReason !== 'COMPLETED' ? 'draft' : 'merged';
+		}
+		return { text: 'Closed', color: closedColor, icon: closed };
 	}
 }
 

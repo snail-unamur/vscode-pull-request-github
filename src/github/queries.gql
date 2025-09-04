@@ -64,6 +64,7 @@ fragment IssueBase on Issue {
 	number
 	url
 	state
+	stateReason
 	body
 	bodyHTML
 	title
@@ -248,6 +249,8 @@ fragment PullRequestFragment on PullRequest {
 			...Node
 		}
 	}
+	additions
+	deletions
 }
 
 query Issue($owner: String!, $name: String!, $number: Int!) {

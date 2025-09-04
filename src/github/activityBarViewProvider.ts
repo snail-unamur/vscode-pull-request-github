@@ -80,7 +80,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 		} while (attemptsRemaining > 0 && mergability === PullRequestMergeability.Unknown);
 
 		const result: Partial<PullRequest> = {
-			events: await this._item.getTimelineEvents(this._item),
+			events: await this._item.getTimelineEvents(),
 			mergeable: mergability,
 		};
 		await this.refresh();
@@ -214,7 +214,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 				pullRequestModel.number,
 			),
 			this._folderRepositoryManager.getPullRequestRepositoryAccessAndMergeMethods(pullRequestModel),
-			pullRequestModel.getTimelineEvents(pullRequestModel),
+			pullRequestModel.getTimelineEvents(),
 			pullRequestModel.getReviewRequests(),
 			this._folderRepositoryManager.getBranchNameForPullRequest(pullRequestModel),
 			this._folderRepositoryManager.getPullRequestRepositoryDefaultBranch(pullRequestModel),
@@ -446,7 +446,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 				this._replyMessage(message, result);
 			})
 			.catch(e => {
-				vscode.window.showErrorMessage(vscode.l10n.t('Unable to set PR ready for review. {0}', formatError(e)));
+				vscode.window.showErrorMessage(vscode.l10n.t('Unable to set pull request ready for review. {0}', formatError(e)));
 				this._throwError(message, '');
 			});
 	}
@@ -473,7 +473,7 @@ export class PullRequestViewProvider extends WebviewViewBase implements vscode.W
 				vscode.commands.executeCommand('pr.refreshList');
 
 				if (!result.merged) {
-					vscode.window.showErrorMessage(vscode.l10n.t('Merging PR failed: {0}', result?.message ?? ''));
+					vscode.window.showErrorMessage(vscode.l10n.t('Merging pull request failed: {0}', result?.message ?? ''));
 				}
 
 				this._replyMessage(message, {
