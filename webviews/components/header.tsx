@@ -32,7 +32,8 @@ export function Header({
 	owner,
 	repo,
 	busy,
-	stateReason
+	stateReason,
+	analysis
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
 	const [inEditMode, setEditMode] = useState(false);
@@ -52,7 +53,7 @@ export function Header({
 				owner={owner}
 				repo={repo}
 			/>
-			<Subtitle state={state} stateReason={stateReason} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} />
+			<Subtitle state={state} stateReason={stateReason} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} analysis={analysis} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -211,7 +212,8 @@ function CancelCodingAgentButton({ canEdit, codingAgentEvent }: { canEdit: boole
 	/>;
 }
 
-function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent }) {
+
+function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
 	const { text, color, icon } = getStatus(state, isDraft, isIssue, stateReason);
 	const copilotStatus = copilotEventToStatus(codingAgentEvent);
 	let copilotStatusIcon: JSX.Element | undefined;
@@ -229,6 +231,14 @@ function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, co
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
+			{ analysis ?
+			<div id="status" className={`size-badge-A`}>
+				<span>Risk value {analysis.riskValue}</span>
+			</div> : <div id="status" className={`size-badge-notfound`}>
+				<span>No risk category retreived</span>
+			</div>
+			}
+
 			<div className="author">
 				{<Avatar for={author} substituteIcon={copilotStatusIcon} />}
 				<div className="merge-branches">

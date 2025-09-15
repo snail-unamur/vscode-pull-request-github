@@ -13,7 +13,7 @@ import { PRType } from '../../github/interface';
 import { NotificationProvider } from '../../github/notifications';
 import { PullRequestModel } from '../../github/pullRequestModel';
 import { PrsTreeModel } from '../prsTreeModel';
-import { CategoryTreeNode, isAllQuery, isLocalQuery } from './categoryNode';
+import { CategoryTreeNode, isAllQuery, isImprovePRQuery, isLocalQuery } from './categoryNode';
 import { TreeNode, TreeNodeParent } from './treeNode';
 
 export interface IQueryInfo {
@@ -81,14 +81,16 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 		prsTreeModel: PrsTreeModel,
 		copilotManager: CopilotRemoteAgentManager
 	) {
-		const queries = await WorkspaceFolderNode.getQueries(folderManager);
+    const queries = await WorkspaceFolderNode.getQueries(folderManager);
 		const queryCategories: Map<string, CategoryTreeNode> = new Map();
 		for (const queryInfo of queries) {
 			if (isLocalQuery(queryInfo)) {
 				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.LocalPullRequest, notificationProvider, prsTreeModel, copilotManager));
 			} else if (isAllQuery(queryInfo)) {
 				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.All, notificationProvider, prsTreeModel, copilotManager));
-			} else {
+			} else if (isImprovePRQuery(queryInfo)) {
+        queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel, copilotManager));
+      } else {
 				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.Query, notificationProvider, prsTreeModel, copilotManager, queryInfo.label, queryInfo.query));
 			}
 		}
