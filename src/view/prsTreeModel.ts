@@ -399,14 +399,13 @@ export class PrsTreeModel extends Disposable {
 				}
 			}
 		}
-  }
+	}
 
-  async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
+	async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
 		const cache = this.getFolderCache(folderRepoManager);
 		if (!update && cache.has(PRType.ImprovePR) && !fetchNextPage) {
-			return cache.get(PRType.ImprovePR)!;
+			return cache.get(PRType.ImprovePR)!.items;
 		}
-
 
 		// FIXME : nothing garantue that will have the right PR because of the batch caching
 		const prs = await folderRepoManager.getPullRequests(
@@ -416,15 +415,10 @@ export class PrsTreeModel extends Disposable {
 
 		const improvedPRClient = folderRepoManager.improvedPRClient;
 		const sorteablePullRequests = new SorteablePullRequests(prs.items, improvedPRClient);
-		const sortedPrs = await sorteablePullRequests.getSortedPullRequests();
-		const newItemResponse = {
-			items: sortedPrs,
-			hasMorePages: prs.hasMorePages,
-			hasUnsearchedRepositories: prs.hasUnsearchedRepositories,
-			totalCount: prs.totalCount
-		};
 
-		cache.set(PRType.ImprovePR, newItemResponse);
+		prs.items = await sorteablePullRequests.getSortedPullRequests();
+
+		cache.set(PRType.ImprovePR, { clearRequested: false, items: prs, maxKnownPR: undefined });
 
 		/* __GDPR__
 			"pr.expand.all" : {}
@@ -433,9 +427,9 @@ export class PrsTreeModel extends Disposable {
 		// Not useful for now
 		// this._telemetry.sendTelemetryEvent('pr.expand.all');
 		// Don't await this._getChecks. It fires an event that will be listened to.
-		this._getChecks(newItemResponse.items);
+		this._getChecks(prs.items);
 		this.hasLoaded = true;
-		return newItemResponse;
+		return prs;
 	}
 
 	override dispose() {
