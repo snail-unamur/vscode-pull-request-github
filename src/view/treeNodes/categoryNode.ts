@@ -204,8 +204,6 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 		} else {
 			this.tooltip = this.label;
 		}
-
-		this.description = this._getDescription();
 	}
 
 	private _getDescription(): string | undefined {
@@ -319,7 +317,7 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 
 		if (this.prs.size > 0) {
 			const nodes: (PRNode | PRCategoryActionNode)[] = Array.from(this.prs.values()).map(
-				prItem => new PRNode(this, this.folderRepoManager, prItem, this.type === PRType.LocalPullRequest, this._notificationProvider),
+				prItem => new PRNode(this, this.folderRepoManager, prItem, this.type === PRType.LocalPullRequest, this._notificationProvider, this._copilotManager),
 			);
 			if (hasMorePages) {
 				nodes.push(new PRCategoryActionNode(this, PRCategoryActionType.More, this));
@@ -339,6 +337,7 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 	}
 
 	getTreeItem(): vscode.TreeItem {
+		this.description = this._getDescription();
 		return this;
 	}
 }

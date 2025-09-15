@@ -49,7 +49,6 @@ import { PRNotificationDecorationProvider } from './view/prNotificationDecoratio
 import { PullRequestsTreeDataProvider } from './view/prsTreeDataProvider';
 import { ReviewManager, ShowPullRequest } from './view/reviewManager';
 import { ReviewsManager } from './view/reviewsManager';
-import { SessionLogViewManager } from './view/sessionLogView';
 import { TreeDecorationProviders } from './view/treeDecorationProviders';
 import { WebviewViewCoordinator } from './view/webviewViewCoordinator';
 
@@ -244,9 +243,6 @@ async function init(
 
 	context.subscriptions.push(new GitLensIntegration());
 
-	const sessionLogViewManager = new SessionLogViewManager(credentialStore, context, reposManager, telemetry, copilotRemoteAgentManager);
-	context.subscriptions.push(sessionLogViewManager);
-
 	context.subscriptions.push(new OverviewRestorer(reposManager, telemetry, context.extensionUri, credentialStore));
 
 	await vscode.commands.executeCommand('setContext', 'github:initialized', true);
@@ -421,7 +417,7 @@ async function deferredActivate(context: vscode.ExtensionContext, showPRControll
 
 	Logger.debug('Creating tree view.', 'Activation');
 
-	const copilotRemoteAgentManager = new CopilotRemoteAgentManager(credentialStore, reposManager, telemetry, context);
+	const copilotRemoteAgentManager = new CopilotRemoteAgentManager(credentialStore, reposManager, telemetry, context, apiImpl);
 	context.subscriptions.push(copilotRemoteAgentManager);
 	if (vscode.chat?.registerChatSessionItemProvider) {
 		const provider = new class implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {

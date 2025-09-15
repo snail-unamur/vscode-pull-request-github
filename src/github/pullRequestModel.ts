@@ -1134,8 +1134,8 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			owner: remote.owner,
 			repo: remote.repositoryName,
 			pull_number: this.number,
-			reviewers: reviewers.filter(r => r.accountType !== AccountType.Bot).map(r => r.id),
-			team_reviewers: teamReviewers.map(t => t.id)
+			reviewers: reviewers.map(r => r.id),
+			team_reviewers: teamReviewers.map(t => t.id),
 		});
 
 		this.reviewers = this.reviewers?.filter(r => !reviewers.some(rr => rr.id === r.id) && !teamReviewers.some(t => t.id === r.id)) || [];
@@ -1531,6 +1531,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 		if (!this.base) {
 			Logger.appendLine('No base branch found for PR, fetching it now', PullRequestModel.ID);
+			Logger.trace(`Fetching from ${remote.owner}/${remote.repositoryName}. PR #${this.number}`, PullRequestModel.ID);
 			const info = await octokit.call(octokit.api.pulls.get, {
 				owner: remote.owner,
 				repo: remote.repositoryName,

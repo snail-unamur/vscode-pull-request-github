@@ -37,10 +37,10 @@
 		"tokenInformation",
 		"treeViewMarkdownMessage"
 	],
-	"version": "0.116.0",
+	"version": "0.118.0",
 	"publisher": "GitHub",
 	"engines": {
-		"vscode": "^1.103.0"
+		"vscode": "^1.104.0"
 	},
 	"categories": [
 		"Other",
@@ -57,7 +57,6 @@
 		"onFileSystem:githubpr",
 		"onFileSystem:githubcommit",
 		"onFileSystem:review",
-		"onWebviewPanel:pr.codingAgentSessionLogView",
 		"onWebviewPanel:IssueOverview",
 		"onWebviewPanel:PullRequestOverview"
 	],
@@ -1896,6 +1895,21 @@
 			},
 			{
 				"view": "workbench.view.chat.sessions.copilot-swe-agent",
+				"when": "workspaceFolderCount == 0",
+				"contents": "%welcome.pr.github.noFolder.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-swe-agent",
+				"when": "git.state == initialized && gitOpenRepositoryCount == 0 && workspaceFolderCount > 0 && git.parentRepositoryCount == 0",
+				"contents": "%welcome.pr.github.noRepo.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-swe-agent",
+				"when": "git.state == initialized && workspaceFolderCount > 0 && (git.parentRepositoryCount > 0 || gitOpenRepositoryCount > 0) && !github:hasGitHubRemotes",
+				"contents": "%welcome.chat.sessions.copilot-swe-agent.noGitHub.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-swe-agent",
 				"when": "ReposManagerStateContext == NeedsAuthentication && github:hasGitHubRemotes",
 				"contents": "%welcome.chat.sessions.copilot-swe-agent.login.contents%"
 			},
@@ -3457,10 +3471,6 @@
 					"command": "pr.checkoutOnVscodeDevFromDescription",
 					"group": "checkout@1",
 					"when": "webviewId == PullRequestOverview && github:checkoutMenu"
-				},
-				{
-					"command": "pr.openSessionLogFromDescription",
-					"when": "webviewId == PullRequestOverview && github:codingAgentMenu"
 				}
 			],
 			"chat/chatSessions": [
@@ -4290,7 +4300,6 @@
 		"mocha": "^9.0.1",
 		"mocha-junit-reporter": "1.23.0",
 		"mocha-multi-reporters": "1.1.7",
-		"monaco-editor-webpack-plugin": "^7.1.0",
 		"os-browserify": "^0.3.0",
 		"p-all": "^1.0.0",
 		"path-browserify": "1.0.1",
@@ -4333,11 +4342,9 @@
 		"lru-cache": "6.0.0",
 		"markdown-it": "^14.1.0",
 		"marked": "^4.0.10",
-		"monaco-editor": "^0.52.2",
 		"react": "^16.12.0",
 		"react-chartjs-2": "^5.3.0",
 		"react-dom": "^16.12.0",
-		"shiki": "^3.7.0",
 		"ssh-config": "4.1.1",
 		"stream-http": "^3.2.0",
 		"temporal-polyfill": "^0.3.0",
