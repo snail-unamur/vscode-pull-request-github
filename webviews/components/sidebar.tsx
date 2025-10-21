@@ -506,6 +506,16 @@ function RadarChartDisplay() {
 			{' '}in <strong>{files}</strong> files (the analysis is based on the modified files)
 		</div>
 		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+		<div className="metric-list">
+			{pr?.analysis.radarMetrics.map(m => {
+				return (
+				<span key={m.fullName}>
+					<strong>{m.fullName}</strong>: {m.description}
+					<br />
+				</span>
+				);
+			})}
+		</div>
 	</>
 	);
 }
