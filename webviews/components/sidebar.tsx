@@ -235,7 +235,7 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 
 			<Section
 				id="metric"
-				title="Difficulty Chart Overview"
+				title="Difficulty Overview"
 				hasWritePermission={hasWritePermission}
 				onHeaderClick={undefined}
 				className='radar'
