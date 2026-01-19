@@ -309,6 +309,10 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			label += '$(check) ';
 		}
 
+		const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.risk} - ` : '';
+
+		label += sizeCategoryPrefix;
+
 		if (
 			vscode.workspace
 				.getConfiguration(PR_SETTINGS_NAMESPACE)
@@ -346,11 +350,8 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			arguments: [this],
 		};
 
-        const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.risk} -` : '';
-        const extendedLabel = `${sizeCategoryPrefix} ${label}`;
-
-        return {
-			label: extendedLabel as vscode.TreeItemLabel,
+		return {
+			label: label as vscode.TreeItemLabel,
 			id: `${this.parent instanceof TreeNode ? (this.parent.id ?? this.parent.label) : ''}${html_url}${this._isLocal ? this.pullRequestModel.localBranchName : ''}`, // unique id stable across checkout status
 			description,
 			collapsibleState: 1,

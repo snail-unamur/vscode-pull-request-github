@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { PullRequestModel } from '../github/pullRequestModel';
 import {
   improvedPullRequest,
   ImprovedPullRequestType,
 } from './improvedPullRequest';
 import { ImprovedPullRequestClient } from './improvedPullRequestClient';
+import { PullRequestModel } from '../github/pullRequestModel';
 
 export class SorteablePullRequests {
   private _sorteablePRs: ImprovedPullRequestType[] = [];

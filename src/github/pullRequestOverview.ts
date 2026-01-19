@@ -275,7 +275,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			this._updatingPromise = updatingPromise;
 
 			const [
-				pullRequest,
+				pullRequestRef,
 				timelineEvents,
 				defaultBranch,
 				status,
@@ -294,17 +294,15 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				assignableUsers
 			] = await updatingPromise;
 			this._updatingPromise = undefined;
-			if (!pullRequest) {
+			if (!pullRequestRef) {
 				throw new Error(
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
 			}
 
-            // pullRequestRef
-
-            const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
-            const pullRequest = improvedPullRequest(pullRequest, improvedPRClient);
-            await pullRequest.retrieveMetrics();
+			const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
+			const pullRequest = improvedPullRequest(pullRequestRef, improvedPRClient);
+			await pullRequest.retrieveMetrics();
 
 			if (!this._item.equals(pullRequestModel)) {
 				// Updated PR is no longer the current one
@@ -367,12 +365,11 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				mergeQueueEntry: pullRequest.mergeQueueEntry,
 				mergeCommitMeta: pullRequest.mergeCommitMeta,
 				squashCommitMeta: pullRequest.squashCommitMeta,
+				analysis: pullRequest.metrics,
 				isIssue: false,
 				emailForCommit,
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
-				isCopilotOnMyBehalf: await isCopilotOnMyBehalf(pullRequest, currentUser, coAuthors),
-				analysis: pullRequest.metrics,
 				isCopilotOnMyBehalf: await isCopilotOnMyBehalf(pullRequest, currentUser, coAuthors),
 				generateDescriptionTitle: this.getGenerateDescriptionTitle()
 			};

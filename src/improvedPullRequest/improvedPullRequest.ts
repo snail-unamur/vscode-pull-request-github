@@ -1,6 +1,6 @@
-import { PullRequestModel } from '../github/pullRequestModel';
 import { ImprovedPullRequestClient } from './improvedPullRequestClient';
 import { ImprovedPullRequestMetrics } from './improvedPullRequestMetrics';
+import { PullRequestModel } from '../github/pullRequestModel';
 
 export function isImprovedPullRequest(obj: any): obj is ImprovedPullRequestType {
 	return (

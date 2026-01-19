@@ -11,6 +11,7 @@ import { copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '.
 import { CopilotStartedEvent, TimelineEvent } from '../../src/common/timelineEvent';
 import { GithubItemStateEnum, StateReason } from '../../src/github/interface';
 import { CodingAgentContext, OverviewContext, PullRequest } from '../../src/github/views';
+import { ImprovedPullRequestMetrics } from '../../src/improvedPullRequest/improvedPullRequestMetrics';
 import { EDIT_TITLE_BUTTON_ID } from '../common/constants';
 import PullRequestContext from '../common/context';
 import { useStateProp } from '../common/hooks';
@@ -251,15 +252,12 @@ interface SubtitleProps {
 	head: string;
 	codingAgentEvent: TimelineEvent | undefined;
 	canEdit: boolean;
-    analysis: ImprovedPullRequestMetrics;
+	analysis: ImprovedPullRequestMetrics;
 }
 
 function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, canEdit, analysis }: SubtitleProps): JSX.Element {
 	const { changeBaseBranch } = useContext(PullRequestContext);
 	const { text, color, icon } = getStatus(state, !!isDraft, isIssue, stateReason);
-
-function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
-	const { text, color, icon } = getStatus(state, isDraft, isIssue, stateReason);
 	const copilotStatus = copilotEventToStatus(codingAgentEvent);
 	let copilotStatusIcon: JSX.Element | undefined;
 	if (copilotStatus === CopilotPRStatus.Started) {
@@ -276,12 +274,13 @@ function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, co
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
-			{ analysis ?
-			<div id="status" className={`size-badge-A`}>
-				<span>Risk value {analysis.riskValue}</span>
-			</div> : <div id="status" className={`size-badge-notfound`}>
-				<span>No risk category retreived</span>
-			</div>
+
+			{analysis ?
+				<div id="status" className={`size-badge-A`}>
+					<span>Risk value {analysis.riskValue}</span>
+				</div> : <div id="status" className={`size-badge-notfound`}>
+					<span>No risk category retreived</span>
+				</div>
 			}
 
 			<div className="author">
@@ -359,7 +358,7 @@ const CheckoutButton: React.FC<CheckoutButtonProps> = ({ isCurrentlyCheckedOut, 
 	const actions: { label: string; value: string; action: (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => void }[] = [];
 
 	if (isCurrentlyCheckedOut) {
-				actions.push({
+		actions.push({
 			label: `Checkout '${doneCheckoutBranch}'`,
 			value: '',
 			action: () => onClick('exitReviewMode')

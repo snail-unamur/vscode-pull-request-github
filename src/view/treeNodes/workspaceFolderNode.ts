@@ -78,7 +78,7 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 		context: vscode.ExtensionContext,
 		prsTreeModel: PrsTreeModel,
 	) {
-    const queries = await WorkspaceFolderNode.getQueries(folderManager);
+		const queries = await WorkspaceFolderNode.getQueries(folderManager);
 		const queryCategories: Map<string, CategoryTreeNode> = new Map();
 		for (const queryInfo of queries) {
 			if (isLocalQuery(queryInfo)) {
@@ -86,8 +86,8 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 			} else if (isAllQuery(queryInfo)) {
 				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.All, notificationProvider, prsTreeModel));
 			} else if (isImprovePRQuery(queryInfo)) {
-        queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel, copilotManager));
-      } else {
+				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel));
+			} else {
 				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.Query, notificationProvider, prsTreeModel, queryInfo.label, queryInfo.query));
 			}
 		}

@@ -5,6 +5,7 @@
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
+import RadarChart from './radarChart';
 import { Reviewer } from './reviewer';
 import { COPILOT_LOGINS } from '../../src/common/copilot';
 import { gitHubLabelColor } from '../../src/common/utils';
@@ -13,7 +14,6 @@ import { ChangeReviewersReply, PullRequest } from '../../src/github/views';
 import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
-import RadarChart from './radarChart';
 
 function Section({
 	id,

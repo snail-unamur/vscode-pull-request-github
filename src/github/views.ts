@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -22,6 +21,7 @@ import {
 } from './interface';
 import { IComment } from '../common/comment';
 import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
+import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 
 export enum ReviewType {
 	Comment = 'comment',

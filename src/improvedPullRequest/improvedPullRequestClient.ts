@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import Logger from '../common/logger';
 import { ImprovedPullRequestMetrics } from './improvedPullRequestMetrics';
+import Logger from '../common/logger';
 
 export class ImprovedPullRequestClient {
   private _token: string;
