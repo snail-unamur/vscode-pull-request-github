@@ -37,6 +37,7 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
+import { improvedPullRequest } from '../improvedPullRequest/improvedPullRequest';
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
@@ -299,6 +300,12 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				);
 			}
 
+            // pullRequestRef
+
+            const improvedPRClient = this._folderRepositoryManager.improvedPRClient;
+            const pullRequest = improvedPullRequest(pullRequest, improvedPRClient);
+            await pullRequest.retrieveMetrics();
+
 			if (!this._item.equals(pullRequestModel)) {
 				// Updated PR is no longer the current one
 				return;
@@ -364,6 +371,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				emailForCommit,
 				currentUserReviewState: reviewState,
 				revertable: pullRequest.state === GithubItemStateEnum.Merged,
+				isCopilotOnMyBehalf: await isCopilotOnMyBehalf(pullRequest, currentUser, coAuthors),
+				analysis: pullRequest.metrics,
 				isCopilotOnMyBehalf: await isCopilotOnMyBehalf(pullRequest, currentUser, coAuthors),
 				generateDescriptionTitle: this.getGenerateDescriptionTitle()
 			};

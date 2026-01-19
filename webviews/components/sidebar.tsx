@@ -13,6 +13,7 @@ import { ChangeReviewersReply, PullRequest } from '../../src/github/views';
 import PullRequestContext from '../common/context';
 import { Label } from '../common/label';
 import { AuthorLink, Avatar } from '../components/user';
+import RadarChart from './radarChart';
 
 function Section({
 	id,
@@ -21,6 +22,7 @@ function Section({
 	onHeaderClick,
 	children,
 	iconButtonGroup,
+	className
 }: {
 	id: string,
 	title: string,
@@ -28,9 +30,10 @@ function Section({
 	onHeaderClick?: (e?: React.MouseEvent) => void | Promise<void>,
 	children: React.ReactNode,
 	iconButtonGroup?: React.ReactNode,
+	className?: string,
 }) {
 	return (
-		<div id={id} className="section">
+		<div id={id} className={`section ${className ?? ''}`}>
 			<div
 				className={`section-header ${hasWritePermission ? 'clickable' : ''}`}
 				onClick={hasWritePermission ? onHeaderClick : undefined}
@@ -53,7 +56,7 @@ function Section({
 	);
 }
 
-export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot, canRequestCopilotReview }: PullRequest) {
+export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot, canRequestCopilotReview, analysis }: PullRequest) {
 	const {
 		addReviewers,
 		addReviewerCopilot,
@@ -268,6 +271,18 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					<div className="section-placeholder">No milestone</div>
 				)}
 			</Section>
+
+			<Section
+				id="metric"
+				title="Difficulty Overview"
+				hasWritePermission={hasWritePermission}
+				onHeaderClick={undefined}
+				className='radar'
+			>
+				{analysis && analysis.radarMetrics ? (<RadarChartDisplay key={'Radar-chart'} />) : (
+					<div className="section-placeholder">No chart yet</div>
+				)}
+			</Section>
 		</div>
 	);
 }
@@ -458,7 +473,7 @@ function CollapsedLabel(props: PullRequest) {
 	}
 
 	if (!sections.length) {
-		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, and Milestone' : 'Reviewers, Assignees, Labels, Project, and Milestone'}</span>;
+		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, Milestone and Risk Analysis' : 'Reviewers, Assignees, Labels, Project, Milestone and Risk Analysis'}</span>;
 	}
 
 	return (
@@ -510,6 +525,39 @@ function Milestone(milestone: IMilestone & { canDelete: boolean }) {
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+function RadarChartDisplay() {
+	const { pr } = useContext(PullRequestContext);
+
+	const loc = pr?.analysis.defaultMetrics.find(m => m.id === 'new_lines')?.value;
+	const coverage = pr?.analysis.defaultMetrics.find(m => m.id === 'new_coverage')?.value;
+	const files = pr?.analysis.defaultMetrics.find(m => m.id === 'files')?.value;
+
+	return (<>
+		<div className="section-placeholder">
+			For <strong>{loc}</strong> modified lines of code
+			{coverage != null && (
+				<>
+					{' with '}
+					<strong>{coverage}%</strong> test coverage
+				</>
+			)}
+			{' '}in <strong>{files}</strong> files (the analysis is based on the modified files)
+		</div>
+		<RadarChart metrics={pr.analysis.radarMetrics} isDarkTheme={pr.isDarkTheme} />
+		<div className="metric-list">
+			{pr?.analysis.radarMetrics.map(m => {
+				return (
+				<span key={m.fullName}>
+					<strong>{m.fullName}</strong>: {m.description}
+					<br />
+				</span>
+				);
+			})}
+		</div>
+	</>
 	);
 }
 

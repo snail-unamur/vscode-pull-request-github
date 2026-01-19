@@ -111,6 +111,7 @@ export namespace DefaultQueries {
 	export namespace Queries {
 		export const LOCAL = 'Local Pull Request Branches';
 		export const ALL = 'All Open';
+		export const IMPROVEPR = 'Fit For Me';
 	}
 	export namespace Values {
 		export const DEFAULT = 'default';
@@ -123,6 +124,10 @@ export function isLocalQuery(queryInfo: IQueryInfo): boolean {
 
 export function isAllQuery(queryInfo: IQueryInfo): boolean {
 	return queryInfo.label === DefaultQueries.Queries.ALL && queryInfo.query === DefaultQueries.Values.DEFAULT;
+}
+
+export function isImprovePRQuery(queryInfo: IQueryInfo): boolean {
+	return queryInfo.label === DefaultQueries.Queries.IMPROVEPR && queryInfo.query === DefaultQueries.Values.DEFAULT;
 }
 
 export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
@@ -160,6 +165,9 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 				break;
 			case PRType.LocalPullRequest:
 				this.label = vscode.l10n.t('Local Pull Request Branches');
+				break;
+			case PRType.ImprovePR:
+				this.label = vscode.l10n.t('Fit For Me');
 				break;
 			default:
 				this.label = '';
@@ -285,6 +293,9 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 				switch (this.type) {
 					case PRType.All:
 						response = await this._prsTreeModel.getAllPullRequests(this.folderRepoManager, fetchNextPage);
+						break;
+					case PRType.ImprovePR:
+						response = await this._prsTreeModel.getImprovedPullRequests(this.folderRepoManager, fetchNextPage);
 						break;
 					case PRType.Query:
 						response = await this._prsTreeModel.getPullRequestsForQuery(this.folderRepoManager, fetchNextPage, this._categoryQuery!);

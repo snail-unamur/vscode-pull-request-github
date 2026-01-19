@@ -15,6 +15,7 @@ import { createPRNodeUri, DataUri, fromPRUri, Schemes } from '../../common/uri';
 import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { CopilotWorkingStatus } from '../../github/githubRepository';
 import { IResolvedPullRequestModel, PullRequestModel } from '../../github/pullRequestModel';
+import { hasMetrics, isImprovedPullRequest } from '../../improvedPullRequest/improvedPullRequest';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../fileChangeModel';
 import { getInMemPRFileSystemProvider, provideDocumentContentForChangeModel } from '../inMemPRContentProvider';
 import { getIconForeground, getListErrorForeground, getListWarningForeground, getNotebookStatusSuccessIconForeground } from '../theme';
@@ -345,8 +346,11 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			arguments: [this],
 		};
 
-		return {
-			label: label as vscode.TreeItemLabel,
+        const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.risk} -` : '';
+        const extendedLabel = `${sizeCategoryPrefix} ${label}`;
+
+        return {
+			label: extendedLabel as vscode.TreeItemLabel,
 			id: `${this.parent instanceof TreeNode ? (this.parent.id ?? this.parent.label) : ''}${html_url}${this._isLocal ? this.pullRequestModel.localBranchName : ''}`, // unique id stable across checkout status
 			description,
 			collapsibleState: 1,

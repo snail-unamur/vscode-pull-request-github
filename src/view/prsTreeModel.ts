@@ -19,6 +19,7 @@ import { CheckState, PRType, PullRequestChecks, PullRequestReviewRequirement } f
 import { PullRequestModel } from '../github/pullRequestModel';
 import { RepositoriesManager } from '../github/repositoriesManager';
 import { extractRepoFromQuery, UnsatisfiedChecks } from '../github/utils';
+import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
 import { CodingAgentPRAndStatus, CopilotStateModel, getCopilotQuery } from '../github/copilotPrWatcher';
@@ -52,10 +53,9 @@ export class PrsTreeModel extends Disposable {
 	// Key is identifier from createPRNodeUri
 	private readonly _queriedPullRequests: Map<string, PRStatusChange> = new Map();
 
-	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All, CachedPRs>> = new Map();
+	private _cachedPRs: Map<FolderRepositoryManager, Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, CachedPRs>> = new Map();
 	// For ease of finding which PRs we know about
 	private _allCachedPRs: Set<PullRequestModel> = new Set();
-
 	private readonly _repoEvents: Map<FolderRepositoryManager, vscode.Disposable[]> = new Map();
 	private _getPullRequestsForQueryLock: Promise<void> = Promise.resolve();
 	private _sentNoRepoTelemetry: boolean = false;
@@ -270,7 +270,7 @@ export class PrsTreeModel extends Disposable {
 		this._onDidChangePrStatus.fire(changedStatuses);
 	}
 
-	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All, CachedPRs> {
+	private getFolderCache(folderRepoManager: FolderRepositoryManager): Map<string | PRType.LocalPullRequest | PRType.All | PRType.ImprovePR, CachedPRs> {
 		let cache = this._cachedPRs.get(folderRepoManager);
 		if (!cache) {
 			cache = new Map();
@@ -578,6 +578,37 @@ export class PrsTreeModel extends Disposable {
 
 		await this.refreshCopilotStateChanges(clearCache);
 		return this.copilotStateModel.all;
+	}
+
+	async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
+		const cache = this.getFolderCache(folderRepoManager);
+		if (!update && cache.has(PRType.ImprovePR) && !fetchNextPage) {
+			return cache.get(PRType.ImprovePR)!.items;
+		}
+
+		// FIXME : nothing garantue that will have the right PR because of the batch caching
+		const prs = await folderRepoManager.getPullRequests(
+			PRType.All,
+			{ fetchNextPage }
+		);
+
+		const improvedPRClient = folderRepoManager.improvedPRClient;
+		const sorteablePullRequests = new SorteablePullRequests(prs.items, improvedPRClient);
+
+		prs.items = await sorteablePullRequests.getSortedPullRequests();
+
+		cache.set(PRType.ImprovePR, { clearRequested: false, items: prs, maxKnownPR: undefined });
+
+		/* __GDPR__
+			"pr.expand.all" : {}
+		*/
+
+		// Not useful for now
+		// this._telemetry.sendTelemetryEvent('pr.expand.all');
+		// Don't await this._getChecks. It fires an event that will be listened to.
+		this._getChecks(prs.items);
+		this.hasLoaded = true;
+		return prs;
 	}
 
 	override dispose() {

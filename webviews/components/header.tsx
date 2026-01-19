@@ -33,7 +33,8 @@ export function Header({
 	owner,
 	repo,
 	busy,
-	stateReason
+	stateReason,
+	analysis
 }: PullRequest) {
 	const [currentTitle, setCurrentTitle] = useStateProp(title);
 	const [inEditMode, setEditMode] = useState(false);
@@ -53,7 +54,7 @@ export function Header({
 				owner={owner}
 				repo={repo}
 			/>
-			<Subtitle state={state} stateReason={stateReason} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} canEdit={canEdit} />
+			<Subtitle state={state} stateReason={stateReason} head={head} base={base} author={author} isIssue={isIssue} isDraft={isDraft} codingAgentEvent={codingAgentEvent} canEdit={canEdit} analysis={analysis} />
 			<div className="header-actions">
 				<ButtonGroup
 					isCurrentlyCheckedOut={isCurrentlyCheckedOut}
@@ -250,11 +251,15 @@ interface SubtitleProps {
 	head: string;
 	codingAgentEvent: TimelineEvent | undefined;
 	canEdit: boolean;
+    analysis: ImprovedPullRequestMetrics;
 }
 
-function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, canEdit }: SubtitleProps): JSX.Element {
+function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, canEdit, analysis }: SubtitleProps): JSX.Element {
 	const { changeBaseBranch } = useContext(PullRequestContext);
 	const { text, color, icon } = getStatus(state, !!isDraft, isIssue, stateReason);
+
+function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, analysis }) {
+	const { text, color, icon } = getStatus(state, isDraft, isIssue, stateReason);
 	const copilotStatus = copilotEventToStatus(codingAgentEvent);
 	let copilotStatusIcon: JSX.Element | undefined;
 	if (copilotStatus === CopilotPRStatus.Started) {
@@ -271,6 +276,14 @@ function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, co
 				<span className='icon'>{icon}</span>
 				<span>{text}</span>
 			</div>
+			{ analysis ?
+			<div id="status" className={`size-badge-A`}>
+				<span>Risk value {analysis.riskValue}</span>
+			</div> : <div id="status" className={`size-badge-notfound`}>
+				<span>No risk category retreived</span>
+			</div>
+			}
+
 			<div className="author">
 				{<Avatar for={author} substituteIcon={copilotStatusIcon} />}
 				<div className="merge-branches">

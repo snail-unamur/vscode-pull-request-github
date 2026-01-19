@@ -58,6 +58,7 @@ import { AsyncPredicate, batchPromiseAll, compareIgnoreCase, formatError, Predic
 import { PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
 import { BRANCHES_ASSOCIATED_WITH_PRS, LAST_USED_EMAIL, NEVER_SHOW_PULL_NOTIFICATION, REPO_KEYS, ReposState } from '../extensionState';
 import { git } from '../gitProviders/gitCommands';
+import { ImprovedPullRequestClient } from '../improvedPullRequest/improvedPullRequestClient';
 import { IThemeWatcher } from '../themeWatcher';
 import { CreatePullRequestHelper } from '../view/createPullRequestHelper';
 
@@ -275,6 +276,10 @@ export class FolderRepositoryManager extends Disposable {
 
 	get gitHubRepositories(): GitHubRepository[] {
 		return this._githubRepositories;
+	}
+
+	get improvedPRClient(): ImprovedPullRequestClient {
+		return this._credentialStore.improvedPRClient;
 	}
 
 	public async computeAllUnknownRemotes(): Promise<Remote[]> {
@@ -3053,7 +3058,7 @@ export const byRemoteName = (name: string): Predicate<GitHubRepository> => ({ re
 /**
  * Unwraps lines that were wrapped for conventional commit message formatting (typically at 72 characters).
  * Similar to GitHub's behavior when converting commit messages to PR descriptions.
- * 
+ *
  * Rules:
  * - Preserves blank lines as paragraph breaks
  * - Preserves fenced code blocks (```)

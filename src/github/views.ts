@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -111,6 +112,7 @@ export interface PullRequest extends Issue {
 	revertable?: boolean;
 	busy?: boolean;
 	loadingCommit?: string;
+	analysis: ImprovedPullRequestMetrics;
 	generateDescriptionTitle?: string;
 }
 

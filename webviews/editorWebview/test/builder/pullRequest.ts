@@ -65,4 +65,5 @@ export const PullRequestBuilder = createBuilderClass<PullRequest>()({
 	canRequestCopilotReview: { default: false },
 	isCopilotOnMyBehalf: { default: false },
 	reactions: { default: [] },
+	analysis: { default: { riskValue: 0, radarMetrics: [], defaultMetrics: [] } },
 });

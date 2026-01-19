@@ -1710,6 +1710,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		parsed.forEach(fileChange => {
 			this._fileChanges.set(fileChange.fileName, fileChange);
 		});
+
 		return parsed;
 	}
 
