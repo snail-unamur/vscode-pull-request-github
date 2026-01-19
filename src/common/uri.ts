@@ -9,14 +9,15 @@ import { Buffer } from 'buffer';
 import * as pathUtils from 'path';
 import fetch from 'cross-fetch';
 import * as vscode from 'vscode';
+import { RemoteInfo } from '../../common/types';
 import { Repository } from '../api/api';
 import { EXTENSION_ID } from '../constants';
-import { IAccount, isITeam, ITeam, reviewerId } from '../github/interface';
-import { PullRequestModel } from '../github/pullRequestModel';
 import { GitChangeType } from './file';
 import Logger from './logger';
 import { TemporaryState } from './temporaryState';
 import { compareIgnoreCase } from './utils';
+import { IAccount, isITeam, ITeam, reviewerId } from '../github/interface';
+import { PullRequestModel } from '../github/pullRequestModel';
 
 export interface ReviewUriParams {
 	path: string;
@@ -52,7 +53,8 @@ export function fromPRUri(uri: vscode.Uri): PRUriParams | undefined {
 }
 
 export interface PRNodeUriParams {
-	prIdentifier: string
+	prIdentifier: string;
+	showCopilot?: boolean;
 }
 
 export function fromPRNodeUri(uri: vscode.Uri): PRNodeUriParams | undefined {
@@ -193,7 +195,7 @@ export async function asTempStorageURI(uri: vscode.Uri, repository: Repository):
 
 		if (ImageMimetypes.indexOf(mimetype) > -1) {
 			const contents = await repository.buffer(ref, absolutePath);
-			return TemporaryState.write(pathUtils.dirname(path), pathUtils.basename(path), contents);
+			return TemporaryState.write(pathUtils.dirname(path), pathUtils.basename(path), contents, false, repository.rootUri);
 		}
 	} catch (err) {
 		return;
@@ -204,7 +206,17 @@ export namespace DataUri {
 	const iconsFolder = 'userIcons';
 
 	function iconFilename(user: IAccount | ITeam): string {
-		return `${reviewerId(user)}.jpg`;
+		// Include avatarUrl hash to invalidate cache when URL changes
+		const baseId = reviewerId(user);
+		if (user.avatarUrl) {
+			// Create a simple hash of the URL to detect changes
+			const urlHash = user.avatarUrl.split('').reduce((a, b) => {
+				a = ((a << 5) - a) + b.charCodeAt(0);
+				return a & a;
+			}, 0);
+			return `${baseId}_${Math.abs(urlHash)}.jpg`;
+		}
+		return `${baseId}.jpg`;
 	}
 
 	function cacheLocation(context: vscode.ExtensionContext): vscode.Uri {
@@ -290,7 +302,6 @@ export namespace DataUri {
 		const startingCacheSize = cacheLogOrder.length;
 
 		const results = await Promise.all(users.map(async (user) => {
-
 			const imageSourceUrl = user.avatarUrl;
 			if (imageSourceUrl === undefined) {
 				return undefined;
@@ -310,9 +321,14 @@ export namespace DataUri {
 				cacheMiss = true;
 				const doFetch = async () => {
 					const response = await fetch(imageSourceUrl.toString());
-					const buffer = await response.arrayBuffer();
-					await writeAvatarToCache(context, user, new Uint8Array(buffer));
-					innerImageContents = Buffer.from(buffer);
+					if (!response.ok) {
+						throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+					}
+					if (response.headers.get('content-type')?.startsWith('image/')) {
+						const buffer = await response.arrayBuffer();
+						await writeAvatarToCache(context, user, new Uint8Array(buffer));
+						innerImageContents = Buffer.from(buffer);
+					}
 				};
 				try {
 					await doFetch();
@@ -488,12 +504,15 @@ export function parsePRNodeIdentifier(identifier: string): { remote: string, prN
 }
 
 export function createPRNodeUri(
-	pullRequest: PullRequestModel | { remote: string, prNumber: number } | string
+	pullRequest: PullRequestModel | { remote: string, prNumber: number } | string, showCopilot?: boolean
 ): vscode.Uri {
 	const identifier = createPRNodeIdentifier(pullRequest);
 	const params: PRNodeUriParams = {
 		prIdentifier: identifier,
 	};
+	if (showCopilot !== undefined) {
+		params.showCopilot = showCopilot;
+	}
 
 	const uri = vscode.Uri.parse(`PRNode:${identifier}`);
 
@@ -501,6 +520,36 @@ export function createPRNodeUri(
 		scheme: Schemes.PRNode,
 		query: JSON.stringify(params)
 	});
+}
+
+export interface CommitsNodeUriParams {
+	owner: string;
+	repo: string;
+	prNumber: number;
+}
+
+export function createCommitsNodeUri(owner: string, repo: string, prNumber: number): vscode.Uri {
+	const params: CommitsNodeUriParams = {
+		owner,
+		repo,
+		prNumber
+	};
+
+	return vscode.Uri.parse(`${Schemes.CommitsNode}:${owner}/${repo}/${prNumber}`).with({
+		scheme: Schemes.CommitsNode,
+		query: JSON.stringify(params)
+	});
+}
+
+export function fromCommitsNodeUri(uri: vscode.Uri): CommitsNodeUriParams | undefined {
+	if (uri.scheme !== Schemes.CommitsNode) {
+		return undefined;
+	}
+	try {
+		return JSON.parse(uri.query) as CommitsNodeUriParams;
+	} catch (e) {
+		return undefined;
+	}
 }
 
 export interface NotificationUriParams {
@@ -619,6 +668,8 @@ function validateOpenWebviewParams(owner?: string, repo?: string, number?: strin
 export enum UriHandlerPaths {
 	OpenIssueWebview = '/open-issue-webview',
 	OpenPullRequestWebview = '/open-pull-request-webview',
+	CheckoutPullRequest = '/checkout-pull-request',
+	OpenPullRequestChanges = '/open-pull-request-changes'
 }
 
 export interface OpenIssueWebviewUriParams {
@@ -659,19 +710,65 @@ export async function toOpenPullRequestWebviewUri(params: OpenPullRequestWebview
 	return vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: EXTENSION_ID, path: UriHandlerPaths.OpenPullRequestWebview, query }));
 }
 
-export function fromOpenPullRequestWebviewUri(uri: vscode.Uri): OpenPullRequestWebviewUriParams | undefined {
+export async function toOpenPullRequestChangesUri(params: OpenPullRequestWebviewUriParams): Promise<vscode.Uri> {
+	const query = JSON.stringify(params);
+	return vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: EXTENSION_ID, path: UriHandlerPaths.OpenPullRequestChanges, query }));
+}
+
+export function fromOpenOrCheckoutPullRequestWebviewUri(uri: vscode.Uri): OpenPullRequestWebviewUriParams | undefined {
 	if (compareIgnoreCase(uri.authority, EXTENSION_ID) !== 0) {
 		return;
 	}
-	if (uri.path !== UriHandlerPaths.OpenPullRequestWebview) {
+	if (uri.path !== UriHandlerPaths.OpenPullRequestWebview && uri.path !== UriHandlerPaths.CheckoutPullRequest && uri.path !== UriHandlerPaths.OpenPullRequestChanges) {
 		return;
 	}
 	try {
+		// Check if the query uses the new simplified format: uri=https://github.com/owner/repo/pull/number
+		const queryParams = new URLSearchParams(uri.query);
+		const uriParam = queryParams.get('uri');
+		if (uriParam) {
+			// Parse the GitHub PR URL - match only exact format ending with the PR number
+			// Use named regex groups for clarity
+			const prUrlRegex = /^https?:\/\/github\.com\/(?<owner>[^\/]+)\/(?<repo>[^\/]+)\/pull\/(?<pullRequestNumber>\d+)$/;
+			const match = prUrlRegex.exec(uriParam);
+			if (match && match.groups) {
+				const { owner, repo, pullRequestNumber } = match.groups;
+				const params = {
+					owner,
+					repo,
+					pullRequestNumber: parseInt(pullRequestNumber, 10)
+				};
+				if (!validateOpenWebviewParams(params.owner, params.repo, params.pullRequestNumber.toString())) {
+					return;
+				}
+				return params;
+			}
+		}
+
+		// Fall back to the old JSON format for backward compatibility
 		const query = JSON.parse(uri.query.split('&')[0]);
 		if (!validateOpenWebviewParams(query.owner, query.repo, query.pullRequestNumber)) {
 			return;
 		}
 		return query;
+	} catch (e) { }
+}
+
+export function toQueryUri(params: { remote: RemoteInfo | undefined, isCopilot?: boolean }) {
+	const uri = vscode.Uri.from({ scheme: Schemes.PRQuery, path: params.isCopilot ? 'copilot' : undefined, query: params.remote ? JSON.stringify({ remote: params.remote }) : undefined });
+	return uri;
+}
+
+export function fromQueryUri(uri: vscode.Uri): { remote: RemoteInfo | undefined, isCopilot?: boolean } | undefined {
+	if (uri.scheme !== Schemes.PRQuery) {
+		return;
+	}
+	try {
+		const query = uri.query ? JSON.parse(uri.query) : undefined;
+		return {
+			remote: query.remote,
+			isCopilot: uri.path === 'copilot'
+		};
 	} catch (e) { }
 }
 
@@ -691,10 +788,9 @@ export enum Schemes {
 	Repo = 'repo', // New issue file for passing data
 	Git = 'git', // File content from the git extension
 	PRQuery = 'prquery', // PR query tree item
-	GitHubCommit = 'githubcommit' // file content from GitHub for a commit
+	GitHubCommit = 'githubcommit', // file content from GitHub for a commit
+	CommitsNode = 'commitsnode' // Commits tree node, for decorations
 }
-
-export const COPILOT_QUERY = vscode.Uri.from({ scheme: Schemes.PRQuery, path: 'copilot' });
 
 export function resolvePath(from: vscode.Uri, to: string) {
 	if (from.scheme === Schemes.File) {

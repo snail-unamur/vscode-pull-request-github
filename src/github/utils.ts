@@ -7,21 +7,6 @@
 import * as crypto from 'crypto';
 import * as OctokitTypes from '@octokit/types';
 import * as vscode from 'vscode';
-import { Repository } from '../api/api';
-import { GitApiImpl } from '../api/api1';
-import { AuthProvider, GitHubServerType } from '../common/authentication';
-import { COPILOT_ACCOUNTS, IComment, IReviewThread, SubjectType } from '../common/comment';
-import { COPILOT_SWE_AGENT } from '../common/copilot';
-import { DiffHunk, parseDiffHunk } from '../common/diffHunk';
-import { emojify } from '../common/emoji';
-import { GitHubRef } from '../common/githubRef';
-import Logger from '../common/logger';
-import { Remote } from '../common/remote';
-import { Resource } from '../common/resources';
-import { GITHUB_ENTERPRISE, OVERRIDE_DEFAULT_BRANCH, PR_SETTINGS_NAMESPACE, URI } from '../common/settingKeys';
-import * as Common from '../common/timelineEvent';
-import { DataUri, toOpenIssueWebviewUri, toOpenPullRequestWebviewUri } from '../common/uri';
-import { escapeRegExp, gitHubLabelColor, stringReplaceAsync, uniqBy } from '../common/utils';
 import { OctokitCommon } from './common';
 import { FolderRepositoryManager, PullRequestDefaults } from './folderRepositoryManager';
 import { GitHubRepository, ViewerPermission } from './githubRepository';
@@ -54,6 +39,22 @@ import {
 } from './interface';
 import { IssueModel } from './issueModel';
 import { GHPRComment, GHPRCommentThread } from './prComment';
+import { PullRequestModel } from './pullRequestModel';
+import { RemoteInfo } from '../../common/types';
+import { Repository } from '../api/api';
+import { GitApiImpl } from '../api/api1';
+import { AuthProvider, GitHubServerType } from '../common/authentication';
+import { COPILOT_ACCOUNTS, IComment, IReviewThread, SubjectType } from '../common/comment';
+import { COPILOT_SWE_AGENT } from '../common/copilot';
+import { DiffHunk, parseDiffHunk } from '../common/diffHunk';
+import { emojify } from '../common/emoji';
+import { GitHubRef } from '../common/githubRef';
+import Logger from '../common/logger';
+import { Remote } from '../common/remote';
+import { GITHUB_ENTERPRISE, OVERRIDE_DEFAULT_BRANCH, PR_SETTINGS_NAMESPACE, URI } from '../common/settingKeys';
+import * as Common from '../common/timelineEvent';
+import { DataUri, toOpenIssueWebviewUri, toOpenPullRequestWebviewUri } from '../common/uri';
+import { escapeRegExp, gitHubLabelColor, stringReplaceAsync, uniqBy } from '../common/utils';
 
 export const ISSUE_EXPRESSION = /(([A-Za-z0-9_.\-]+)\/([A-Za-z0-9_.\-]+))?(#|GH-)([1-9][0-9]*)($|\b)/;
 export const ISSUE_OR_URL_EXPRESSION = /(https?:\/\/github\.com\/(([^\s]+)\/([^\s]+))\/([^\s]+\/)?(issues|pull)\/([0-9]+)(#issuecomment\-([0-9]+))?)|(([A-Za-z0-9_.\-]+)\/([A-Za-z0-9_.\-]+))?(#|GH-)([1-9][0-9]*)($|\b)/;
@@ -152,15 +153,22 @@ function isResolvedToResolvedState(isResolved: boolean) {
 
 export const COMMENT_EXPAND_STATE_SETTING = 'commentExpandState';
 export const COMMENT_EXPAND_STATE_COLLAPSE_VALUE = 'collapseAll';
+export const COMMENT_EXPAND_STATE_COLLAPSE_PREEXISTING_VALUE = 'collapsePreexisting';
 export const COMMENT_EXPAND_STATE_EXPAND_VALUE = 'expandUnresolved';
-export function getCommentCollapsibleState(thread: IReviewThread, expand?: boolean, currentUser?: string) {
+export function getCommentCollapsibleState(thread: IReviewThread, expand?: boolean, currentUser?: string, isNewlyAdded?: boolean) {
+	const config = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE)?.get(COMMENT_EXPAND_STATE_SETTING);
 	const isFromCurrent = (currentUser && (thread.comments[thread.comments.length - 1].user?.login === currentUser));
 	const isJustSuggestion = thread.comments.length === 1 && thread.comments[0].body.startsWith('```suggestion') && thread.comments[0].body.endsWith('```');
+
+	// When collapsePreexisting is set, keep newly added comments expanded
+	if (config === COMMENT_EXPAND_STATE_COLLAPSE_PREEXISTING_VALUE && isNewlyAdded && !isJustSuggestion) {
+		return vscode.CommentThreadCollapsibleState.Expanded;
+	}
+
 	if (thread.isResolved || (!thread.isOutdated && isFromCurrent && !isJustSuggestion)) {
 		return vscode.CommentThreadCollapsibleState.Collapsed;
 	}
 	if (expand === undefined) {
-		const config = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE)?.get(COMMENT_EXPAND_STATE_SETTING);
 		expand = config === COMMENT_EXPAND_STATE_EXPAND_VALUE;
 	}
 	return expand
@@ -168,7 +176,7 @@ export function getCommentCollapsibleState(thread: IReviewThread, expand?: boole
 }
 
 
-export function updateThreadWithRange(context: vscode.ExtensionContext, vscodeThread: GHPRCommentThread, reviewThread: IReviewThread, githubRepositories?: GitHubRepository[], expand?: boolean) {
+export function updateThreadWithRange(context: vscode.ExtensionContext, vscodeThread: GHPRCommentThread, reviewThread: IReviewThread, githubRepositories?: GitHubRepository[], expand?: boolean, isNewlyAdded?: boolean) {
 	if (!vscodeThread.range) {
 		return;
 	}
@@ -177,13 +185,13 @@ export function updateThreadWithRange(context: vscode.ExtensionContext, vscodeTh
 		if (editor.document.uri.toString() === vscodeThread.uri.toString()) {
 			const endLine = editor.document.lineAt(vscodeThread.range.end.line);
 			const range = new vscode.Range(vscodeThread.range.start.line, 0, vscodeThread.range.end.line, endLine.text.length);
-			updateThread(context, vscodeThread, reviewThread, githubRepositories, expand, range);
+			updateThread(context, vscodeThread, reviewThread, githubRepositories, expand, range, undefined, isNewlyAdded);
 			break;
 		}
 	}
 }
 
-export function updateThread(context: vscode.ExtensionContext, vscodeThread: GHPRCommentThread, reviewThread: IReviewThread, githubRepositories?: GitHubRepository[], expand?: boolean, range?: vscode.Range) {
+export function updateThread(context: vscode.ExtensionContext, vscodeThread: GHPRCommentThread, reviewThread: IReviewThread, githubRepositories?: GitHubRepository[], expand?: boolean, range?: vscode.Range, currentUser?: string, isNewlyAdded?: boolean) {
 	if (reviewThread.viewerCanResolve && !reviewThread.isResolved) {
 		vscodeThread.contextValue = 'canResolve';
 	} else if (reviewThread.viewerCanUnresolve && reviewThread.isResolved) {
@@ -202,7 +210,7 @@ export function updateThread(context: vscode.ExtensionContext, vscodeThread: GHP
 			applicability: newApplicabilityState
 		};
 	}
-	vscodeThread.collapsibleState = getCommentCollapsibleState(reviewThread, expand);
+	vscodeThread.collapsibleState = getCommentCollapsibleState(reviewThread, expand, currentUser, isNewlyAdded);
 	if (range) {
 		vscodeThread.range = range;
 	}
@@ -438,7 +446,7 @@ export function convertRESTReviewEvent(
 	return {
 		event: Common.EventType.Reviewed,
 		comments: [],
-		submittedAt: (review as any).submitted_at, // TODO fix typings upstream
+		submittedAt: review.submitted_at,
 		body: review.body,
 		bodyHTML: review.body,
 		htmlUrl: review.html_url,
@@ -490,6 +498,8 @@ export function convertGraphQLEventType(text: string) {
 			return Common.EventType.Closed;
 		case 'ReopenedEvent':
 			return Common.EventType.Reopened;
+		case 'BaseRefChangedEvent':
+			return Common.EventType.BaseRefChanged;
 		default:
 			return Common.EventType.Other;
 	}
@@ -652,10 +662,13 @@ export function parseAccount(
 		}
 
 		// In some places, Copilot comes in as a user, and in others as a bot
+
+		const finalAvatarUrl = githubRepository ? getAvatarWithEnterpriseFallback(avatarUrl, undefined, githubRepository.remote.isEnterprise) : avatarUrl;
+
 		return {
 			login: author.login,
 			url: COPILOT_ACCOUNTS[author.login]?.url ?? url,
-			avatarUrl: githubRepository ? getAvatarWithEnterpriseFallback(avatarUrl, undefined, githubRepository.remote.isEnterprise) : avatarUrl,
+			avatarUrl: finalAvatarUrl,
 			email: author.email ?? undefined,
 			id,
 			name: author.name ?? COPILOT_ACCOUNTS[author.login]?.name ?? undefined,
@@ -692,7 +705,7 @@ export function parseGraphQLReviewers(data: GraphQL.GetReviewRequestsResponse, r
 		if (GraphQL.isTeam(reviewer.requestedReviewer)) {
 			const team: ITeam = parseTeam(reviewer.requestedReviewer, repository);
 			reviewers.push(team);
-		} else if (GraphQL.isAccount(reviewer.requestedReviewer)) {
+		} else if (GraphQL.isAccount(reviewer.requestedReviewer) || GraphQL.isBot(reviewer.requestedReviewer)) {
 			const account: IAccount = parseAccount(reviewer.requestedReviewer, repository);
 			reviewers.push(account);
 		}
@@ -1117,6 +1130,8 @@ export async function parseCombinedTimelineEvents(
 		| GraphQL.AssignedEvent
 		| GraphQL.HeadRefDeletedEvent
 		| GraphQL.CrossReferencedEvent
+		| GraphQL.BaseRefChangedEvent
+		| null
 	)[],
 	restEvents: Common.TimelineEvent[],
 	githubRepository: GitHubRepository,
@@ -1146,6 +1161,9 @@ export async function parseCombinedTimelineEvents(
 
 	// TODO: work the rest events into the appropriate place in the timeline
 	for (const event of events) {
+		if (!event) {
+			continue;
+		}
 		const type = convertGraphQLEventType(event.__typename);
 
 		switch (type) {
@@ -1193,6 +1211,7 @@ export async function parseCombinedTimelineEvents(
 					htmlUrl: commitEv.url,
 					message: commitEv.commit.message,
 					committedDate: new Date(commitEv.commit.committedDate),
+					status: commitEv.commit.statusCheckRollup?.state
 				} as Common.CommitEvent); // TODO remove cast
 				break;
 			case Common.EventType.Merged:
@@ -1286,6 +1305,18 @@ export async function parseCombinedTimelineEvents(
 					createdAt: reopenedEv.createdAt,
 				});
 				break;
+			case Common.EventType.BaseRefChanged:
+				const baseRefChangedEv = event as GraphQL.BaseRefChangedEvent;
+
+				addTimelineEvent({
+					id: baseRefChangedEv.id,
+					event: type,
+					actor: parseAccount(baseRefChangedEv.actor, githubRepository),
+					createdAt: baseRefChangedEv.createdAt,
+					currentRefName: baseRefChangedEv.currentRefName,
+					previousRefName: baseRefChangedEv.previousRefName,
+				});
+				break;
 			default:
 				break;
 		}
@@ -1334,50 +1365,42 @@ export function getReactionGroup(): { title: string; label: string; icon?: strin
 		{
 			title: 'THUMBS_UP',
 			// allow-any-unicode-next-line
-			label: '👍',
-			icon: Resource.icons.reactions.THUMBS_UP,
+			label: '👍'
 		},
 		{
 			title: 'THUMBS_DOWN',
 			// allow-any-unicode-next-line
-			label: '👎',
-			icon: Resource.icons.reactions.THUMBS_DOWN,
+			label: '👎'
 		},
 		{
 			title: 'LAUGH',
 			// allow-any-unicode-next-line
-			label: '😄',
-			icon: Resource.icons.reactions.LAUGH,
+			label: '😄'
 		},
 		{
 			title: 'HOORAY',
 			// allow-any-unicode-next-line
-			label: '🎉',
-			icon: Resource.icons.reactions.HOORAY,
+			label: '🎉'
 		},
 		{
 			title: 'CONFUSED',
 			// allow-any-unicode-next-line
-			label: '😕',
-			icon: Resource.icons.reactions.CONFUSED,
+			label: '😕'
 		},
 		{
 			title: 'HEART',
 			// allow-any-unicode-next-line
-			label: '❤️',
-			icon: Resource.icons.reactions.HEART,
+			label: '❤️'
 		},
 		{
 			title: 'ROCKET',
 			// allow-any-unicode-next-line
-			label: '🚀',
-			icon: Resource.icons.reactions.ROCKET,
+			label: '🚀'
 		},
 		{
 			title: 'EYES',
 			// allow-any-unicode-next-line
-			label: '👀',
-			icon: Resource.icons.reactions.EYES,
+			label: '👀'
 		},
 	];
 
@@ -1392,6 +1415,7 @@ export async function restPaginate<R extends OctokitTypes.RequestInterface, T>(r
 	do {
 		const result = await request(
 			{
+				// eslint-disable-next-line rulesdir/no-cast-to-any
 				...(variables as any),
 				per_page,
 				page
@@ -1556,7 +1580,7 @@ export function parseNotification(notification: OctokitCommon.Notification): Not
 		lastReadAt: notification.last_read_at ? new Date(notification.last_read_at) : undefined,
 		reason: notification.reason,
 		unread: notification.unread,
-		updatedAd: new Date(notification.updated_at),
+		updatedAt: new Date(notification.updated_at),
 	};
 }
 
@@ -1636,8 +1660,21 @@ export function generateGravatarUrl(gravatarId: string | undefined, size: number
 }
 
 export function getAvatarWithEnterpriseFallback(avatarUrl: string, email: string | undefined, isEnterpriseRemote: boolean): string | undefined {
-	return !isEnterpriseRemote ? avatarUrl : (email ? generateGravatarUrl(
-		crypto.createHash('sha256').update(email?.trim()?.toLowerCase()).digest('hex')) : undefined);
+
+	// For non-enterprise, always use the provided avatarUrl
+	if (!isEnterpriseRemote) {
+		return avatarUrl;
+	}
+
+	// For enterprise, prefer GitHub avatarUrl if available, fallback to Gravatar only if needed
+	if (avatarUrl && avatarUrl.trim()) {
+		return avatarUrl;
+	}
+
+	// Only fallback to Gravatar if no avatarUrl is available and email is provided
+	const gravatarUrl = email ? generateGravatarUrl(
+		crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex')) : undefined;
+	return gravatarUrl;
 }
 
 export function getPullsUrl(repo: GitHubRepository) {
@@ -1670,12 +1707,12 @@ function computeSinceValue(sinceValue: string | undefined): string {
 const COPILOT_PATTERN = /\:(Copilot|copilot)(\s|$)/g;
 
 const VARIABLE_PATTERN = /\$\{([^-]*?)(-.*?)?\}/g;
-export async function variableSubstitution(
+export function variableSubstitution(
 	value: string,
 	issueModel?: IssueModel,
 	defaults?: PullRequestDefaults,
 	user?: string,
-): Promise<string> {
+): string {
 	const withVariables = value.replace(VARIABLE_PATTERN, (match: string, variable: string, extra: string) => {
 		let result: string;
 		switch (variable) {
@@ -1773,6 +1810,12 @@ export function vscodeDevPrLink(pullRequest: IssueModel) {
 	return `https://${vscode.env.appName.toLowerCase().includes('insider') ? 'insiders.' : ''}vscode.dev/github${itemUri.path}`;
 }
 
+export function codespacesPrLink(pullRequest: PullRequestModel): string {
+	const repoFullName = `${pullRequest.head!.owner}/${pullRequest.remote.repositoryName}`;
+	const branch = pullRequest.head!.ref;
+	return `https://github.com/codespaces/new/${encodeURIComponent(repoFullName)}/tree/${encodeURIComponent(branch)}`;
+}
+
 export function makeLabel(label: ILabel): string {
 	const isDarkTheme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
 	const labelColor = gitHubLabelColor(label.color, isDarkTheme, true);
@@ -1787,4 +1830,22 @@ export enum UnsatisfiedChecks {
 	ChangesRequested = 1 << 1,
 	CIFailed = 1 << 2,
 	CIPending = 1 << 3
+}
+
+export async function extractRepoFromQuery(folderManager: FolderRepositoryManager, query: string | undefined): Promise<RemoteInfo | undefined> {
+	if (!query) {
+		return undefined;
+	}
+
+	const defaults = await folderManager.getPullRequestDefaults();
+	// Use a fake user since we only care about pulling out the repo and repo owner
+	const substituted = variableSubstitution(query, undefined, defaults, 'fakeUser');
+
+	const repoRegex = /(?:^|\s)repo:(?:"?(?<owner>[A-Za-z0-9_.-]+)\/(?<repo>[A-Za-z0-9_.-]+)"?)/i;
+	const repoMatch = repoRegex.exec(substituted);
+	if (repoMatch && repoMatch.groups) {
+		return { owner: repoMatch.groups.owner, repositoryName: repoMatch.groups.repo };
+	}
+
+	return undefined;
 }

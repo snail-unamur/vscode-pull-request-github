@@ -6,21 +6,24 @@
 
 import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
+import { FolderRepositoryManager } from './folderRepositoryManager';
+import { GitHubRepository, TeamReviewerRefreshKind } from './githubRepository';
+import { IAccount, ILabel, IMilestone, IProject, isISuggestedReviewer, isITeam, ISuggestedReviewer, ITeam, reviewerId, ReviewState } from './interface';
+import { IssueModel } from './issueModel';
+import { DisplayLabel } from './views';
+import { RemoteInfo } from '../../common/types';
+import { Ref } from '../api/api';
 import { COPILOT_ACCOUNTS } from '../common/comment';
-import { COPILOT_REVIEWER, COPILOT_REVIEWER_ID, COPILOT_SWE_AGENT } from '../common/copilot';
+import { COPILOT_REVIEWER, COPILOT_REVIEWER_ACCOUNT, COPILOT_SWE_AGENT } from '../common/copilot';
 import { emojify, ensureEmojis } from '../common/emoji';
 import Logger from '../common/logger';
 import { DataUri } from '../common/uri';
 import { formatError } from '../common/utils';
-import { FolderRepositoryManager } from './folderRepositoryManager';
-import { GitHubRepository, TeamReviewerRefreshKind } from './githubRepository';
-import { AccountType, IAccount, ILabel, IMilestone, IProject, isISuggestedReviewer, isITeam, ISuggestedReviewer, ITeam, reviewerId, ReviewState } from './interface';
-import { IssueModel } from './issueModel';
-import { DisplayLabel } from './views';
+import { RECENTLY_USED_BRANCHES, RecentlyUsedBranchesState } from '../extensionState';
 
 export async function chooseItem<T>(
 	itemsToChooseFrom: T[],
-	propertyGetter: (itemValue: T) => string,
+	propertyGetter: (itemValue: T) => { label: string; description?: string; },
 	options?: vscode.QuickPickOptions,
 ): Promise<T | undefined> {
 	if (itemsToChooseFrom.length === 0) {
@@ -34,7 +37,7 @@ export async function chooseItem<T>(
 	}
 	const items: Item[] = itemsToChooseFrom.map(currentItem => {
 		return {
-			label: propertyGetter(currentItem),
+			...propertyGetter(currentItem),
 			itemValue: currentItem,
 		};
 	});
@@ -191,15 +194,7 @@ async function getReviewersQuickPickItems(folderRepositoryManager: FolderReposit
 
 	// If we removed the coding agent, add the Copilot reviewer instead
 	if (hasCopilotSweAgent && !existingReviewers.find(user => (user.reviewer as IAccount).login === COPILOT_REVIEWER)) {
-		const copilotReviewer: IAccount = {
-			login: COPILOT_REVIEWER,
-			id: COPILOT_REVIEWER_ID,
-			url: '',
-			avatarUrl: '',
-			name: COPILOT_ACCOUNTS[COPILOT_REVIEWER]?.name ?? 'Copilot',
-			accountType: AccountType.Bot
-		};
-		assignableUsers.push(copilotReviewer);
+		assignableUsers.push(COPILOT_REVIEWER_ACCOUNT);
 	}
 
 	// Suggested reviewers
@@ -479,4 +474,84 @@ export async function pickEmail(githubRepository: GitHubRepository, current: str
 
 	const result = await vscode.window.showQuickPick(getEmails(), { canPickMany: false, title: vscode.l10n.t('Choose an email') });
 	return result ? result.label : undefined;
+}
+
+function getRecentlyUsedBranches(folderRepoManager: FolderRepositoryManager, owner: string, repositoryName: string): string[] {
+	const repoKey = `${owner}/${repositoryName}`;
+	const state = folderRepoManager.context.workspaceState.get<RecentlyUsedBranchesState>(RECENTLY_USED_BRANCHES, { branches: {} });
+	return state.branches[repoKey] || [];
+}
+
+export async function branchPicks(githubRepository: GitHubRepository, folderRepoManager: FolderRepositoryManager, changeRepoMessage: string | undefined, isBase: boolean, prefix: string | undefined): Promise<(vscode.QuickPickItem & { remote?: RemoteInfo, branch?: string })[]> {
+	let branches: (string | Ref)[];
+	if (isBase) {
+		// For the base, we only want to show branches from GitHub.
+		branches = await githubRepository.listBranches(githubRepository.remote.owner, githubRepository.remote.repositoryName, prefix);
+	} else {
+		// For the compare, we only want to show local branches.
+		branches = (await folderRepoManager.repository.getBranches({ remote: false })).filter(branch => branch.name);
+	}
+
+
+	const branchNames = branches.map(branch => typeof branch === 'string' ? branch : branch.name!);
+
+	// Get recently used branches for base branches only
+	let recentBranches: string[] = [];
+	let otherBranches: string[] = branchNames;
+	if (isBase) {
+		const recentlyUsed = getRecentlyUsedBranches(folderRepoManager, githubRepository.remote.owner, githubRepository.remote.repositoryName);
+		// Include all recently used branches, even if they're not in the current branch list
+		// This allows showing branches that weren't fetched due to timeout
+		recentBranches = recentlyUsed;
+		// Remove recently used branches from the main list (if they exist there)
+		otherBranches = branchNames.filter(name => !recentBranches.includes(name));
+	}
+
+	const branchPicks: (vscode.QuickPickItem & { remote?: RemoteInfo, branch?: string })[] = [];
+
+	// Add recently used branches section
+	if (recentBranches.length > 0) {
+		branchPicks.push({
+			kind: vscode.QuickPickItemKind.Separator,
+			label: vscode.l10n.t('Recently Used')
+		});
+		recentBranches.forEach(branchName => {
+			branchPicks.push({
+				iconPath: new vscode.ThemeIcon('git-branch'),
+				label: branchName,
+				remote: {
+					owner: githubRepository.remote.owner,
+					repositoryName: githubRepository.remote.repositoryName
+				},
+				branch: branchName
+			});
+		});
+	}
+
+	// Add all other branches section
+	if (otherBranches.length > 0) {
+		branchPicks.push({
+			kind: vscode.QuickPickItemKind.Separator,
+			label: recentBranches.length > 0 ? vscode.l10n.t('All Branches') : `${githubRepository.remote.owner}/${githubRepository.remote.repositoryName}`
+		});
+		otherBranches.forEach(branchName => {
+			branchPicks.push({
+				iconPath: new vscode.ThemeIcon('git-branch'),
+				label: branchName,
+				remote: {
+					owner: githubRepository.remote.owner,
+					repositoryName: githubRepository.remote.repositoryName
+				},
+				branch: branchName
+			});
+		});
+	}
+
+	if (changeRepoMessage) {
+		branchPicks.unshift({
+			iconPath: new vscode.ThemeIcon('repo'),
+			label: changeRepoMessage
+		});
+	}
+	return branchPicks;
 }

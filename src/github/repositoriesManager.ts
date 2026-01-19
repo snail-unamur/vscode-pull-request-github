@@ -4,6 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { CredentialStore } from './credentials';
+import { FolderRepositoryManager, ReposManagerState, ReposManagerStateContext } from './folderRepositoryManager';
+import { PullRequestChangeEvent } from './githubRepository';
+import { IssueModel } from './issueModel';
+import { findDotComAndEnterpriseRemotes, getEnterpriseUri, hasEnterpriseUri, setEnterpriseUri } from './utils';
 import { Repository } from '../api/api';
 import { AuthProvider } from '../common/authentication';
 import { commands, contexts } from '../common/executeCommands';
@@ -13,11 +18,6 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType } from '../common/timelineEvent';
 import { fromPRUri, fromRepoUri, Schemes } from '../common/uri';
 import { compareIgnoreCase, isDescendant } from '../common/utils';
-import { CredentialStore } from './credentials';
-import { FolderRepositoryManager, ReposManagerState, ReposManagerStateContext } from './folderRepositoryManager';
-import { PullRequestChangeEvent } from './githubRepository';
-import { IssueModel } from './issueModel';
-import { findDotComAndEnterpriseRemotes, getEnterpriseUri, hasEnterpriseUri, setEnterpriseUri } from './utils';
 
 export interface ItemsResponseResult<T> {
 	items: T[];
@@ -225,7 +225,7 @@ export class RepositoriesManager extends Disposable {
 
 	async clearCredentialCache(): Promise<void> {
 		await this._credentialStore.reset();
-		this.updateState(ReposManagerState.Initializing);
+		this.updateState(ReposManagerState.NeedsAuthentication);
 	}
 
 	async authenticate(enterprise?: boolean): Promise<boolean> {

@@ -7,14 +7,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { PR_SETTINGS_NAMESPACE, QUERIES } from '../../common/settingKeys';
 import { ITelemetry } from '../../common/telemetry';
-import { CopilotRemoteAgentManager } from '../../github/copilotRemoteAgent';
 import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { PRType } from '../../github/interface';
-import { NotificationProvider } from '../../github/notifications';
 import { PullRequestModel } from '../../github/pullRequestModel';
 import { PrsTreeModel } from '../prsTreeModel';
 import { CategoryTreeNode, isAllQuery, isImprovePRQuery, isLocalQuery } from './categoryNode';
 import { TreeNode, TreeNodeParent } from './treeNode';
+import { NotificationsManager } from '../../notifications/notificationsManager';
 
 export interface IQueryInfo {
 	label: string;
@@ -31,10 +30,9 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 		uri: vscode.Uri,
 		public readonly folderManager: FolderRepositoryManager,
 		private telemetry: ITelemetry,
-		private notificationProvider: NotificationProvider,
+		private notificationProvider: NotificationsManager,
 		private context: vscode.ExtensionContext,
-		private readonly _prsTreeModel: PrsTreeModel,
-		private readonly _copilotMananger: CopilotRemoteAgentManager
+		private readonly _prsTreeModel: PrsTreeModel
 	) {
 		super(parent);
 		this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
@@ -68,7 +66,7 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 		if (!shouldDispose && this._children) {
 			return this._children;
 		}
-		this._children = await WorkspaceFolderNode.getCategoryTreeNodes(this.folderManager, this.telemetry, this, this.notificationProvider, this.context, this._prsTreeModel, this._copilotMananger);
+		this._children = await WorkspaceFolderNode.getCategoryTreeNodes(this.folderManager, this.telemetry, this, this.notificationProvider, this.context, this._prsTreeModel);
 		return this._children;
 	}
 
@@ -76,22 +74,21 @@ export class WorkspaceFolderNode extends TreeNode implements vscode.TreeItem {
 		folderManager: FolderRepositoryManager,
 		telemetry: ITelemetry,
 		parent: TreeNodeParent,
-		notificationProvider: NotificationProvider,
+		notificationProvider: NotificationsManager,
 		context: vscode.ExtensionContext,
 		prsTreeModel: PrsTreeModel,
-		copilotManager: CopilotRemoteAgentManager
 	) {
-    const queries = await WorkspaceFolderNode.getQueries(folderManager);
+		const queries = await WorkspaceFolderNode.getQueries(folderManager);
 		const queryCategories: Map<string, CategoryTreeNode> = new Map();
 		for (const queryInfo of queries) {
 			if (isLocalQuery(queryInfo)) {
-				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.LocalPullRequest, notificationProvider, prsTreeModel, copilotManager));
+				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.LocalPullRequest, notificationProvider, prsTreeModel));
 			} else if (isAllQuery(queryInfo)) {
-				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.All, notificationProvider, prsTreeModel, copilotManager));
+				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.All, notificationProvider, prsTreeModel));
 			} else if (isImprovePRQuery(queryInfo)) {
-        queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel, copilotManager));
-      } else {
-				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.Query, notificationProvider, prsTreeModel, copilotManager, queryInfo.label, queryInfo.query));
+				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.ImprovePR, notificationProvider, prsTreeModel));
+			} else {
+				queryCategories.set(queryInfo.label, new CategoryTreeNode(parent, folderManager, telemetry, PRType.Query, notificationProvider, prsTreeModel, queryInfo.label, queryInfo.query));
 			}
 		}
 

@@ -6,8 +6,11 @@
 export const PR_SETTINGS_NAMESPACE = 'githubPullRequests';
 export const TERMINAL_LINK_HANDLER = 'terminalLinksHandler';
 export const BRANCH_PUBLISH = 'createOnPublishBranch';
+export const BRANCH_LIST_TIMEOUT = 'branchListTimeout';
 export const USE_REVIEW_MODE = 'useReviewMode';
 export const FILE_LIST_LAYOUT = 'fileListLayout';
+export const HIDE_VIEWED_FILES = 'hideViewedFiles';
+export const FILE_AUTO_REVEAL = 'fileAutoReveal';
 export const ASSIGN_TO = 'assignCreated';
 export const PUSH_BRANCH = 'pushBranch';
 export const IGNORE_PR_BRANCHES = 'ignoredPullRequestBranches';
@@ -17,7 +20,11 @@ export const OVERRIDE_DEFAULT_BRANCH = 'overrideDefaultBranch';
 export const PULL_BRANCH = 'pullBranch';
 export const PULL_REQUEST_DESCRIPTION = 'pullRequestDescription';
 export const NOTIFICATION_SETTING = 'notifications';
+export type NotificationVariants = 'off' | 'pullRequests';
 export const POST_CREATE = 'postCreate';
+export const POST_DONE = 'postDone';
+export const CHECKOUT_PULL_REQUEST_BASE_BRANCH = 'checkoutPullRequestBaseBranch';
+export const CHECKOUT_DEFAULT_BRANCH = 'checkoutDefaultBranch';
 export const QUERIES = 'queries';
 export const PULL_REQUEST_LABELS = 'labelCreated';
 export const FOCUSED_MODE = 'focusedMode';
@@ -29,6 +36,7 @@ export const DEFAULT_MERGE_METHOD = 'defaultMergeMethod';
 export const DEFAULT_DELETION_METHOD = 'defaultDeletionMethod';
 export const SELECT_LOCAL_BRANCH = 'selectLocalBranch';
 export const SELECT_REMOTE = 'selectRemote';
+export const DELETE_BRANCH_AFTER_MERGE = 'deleteBranchAfterMerge';
 export const REMOTES = 'remotes';
 export const PULL_PR_BRANCH_BEFORE_CHECKOUT = 'pullPullRequestBranchBeforeCheckout';
 export type PullPRBranchVariants = 'never' | 'pull' | 'pullAndMergeBase' | 'pullAndUpdateBase' | true | false;
@@ -45,6 +53,7 @@ export const IGNORE_USER_COMPLETION_TRIGGER = 'ignoreUserCompletionTrigger';
 export const CREATE_INSERT_FORMAT = 'createInsertFormat';
 export const ISSUE_BRANCH_TITLE = 'issueBranchTitle';
 export const USE_BRANCH_FOR_ISSUES = 'useBranchForIssues';
+export const WORKING_BASE_BRANCH = 'workingBaseBranch';
 export const WORKING_ISSUE_FORMAT_SCM = 'workingIssueFormatScm';
 export const IGNORE_COMPLETION_TRIGGER = 'ignoreCompletionTrigger';
 export const ISSUE_COMPLETION_FORMAT_SCM = 'issueCompletionFormatScm';
@@ -53,11 +62,13 @@ export const DEFAULT = 'default';
 export const IGNORE_MILESTONES = 'ignoreMilestones';
 export const ALLOW_FETCH = 'allowFetch';
 export const ALWAYS_PROMPT_FOR_NEW_ISSUE_REPO = 'alwaysPromptForNewIssueRepo';
+export const ISSUE_AVATAR_DISPLAY = 'issueAvatarDisplay';
 export const EXPERIMENTAL_CHAT = 'experimental.chat';
 export const EXPERIMENTAL_USE_QUICK_CHAT = 'experimental.useQuickChat';
 export const EXPERIMENTAL_NOTIFICATIONS_PAGE_SIZE = 'experimental.notificationsViewPageSize';
 export const EXPERIMENTAL_NOTIFICATIONS_SCORE = 'experimental.notificationsScore';
 export const WEBVIEW_REFRESH_INTERVAL = 'webviewRefreshInterval';
+export const DEV_MODE = 'devMode';
 
 // git
 export const GIT = 'git';
@@ -65,6 +76,8 @@ export const PULL_BEFORE_CHECKOUT = 'pullBeforeCheckout';
 export const OPEN_DIFF_ON_CLICK = 'openDiffOnClick';
 export const SHOW_INLINE_OPEN_FILE_ACTION = 'showInlineOpenFileAction';
 export const AUTO_STASH = 'autoStash';
+export const BRANCH_WHITESPACE_CHAR = 'branchWhitespaceChar';
+export const BRANCH_RANDOM_NAME_DICTIONARY = 'branchRandomName.dictionary';
 
 // GitHub Enterprise
 export const GITHUB_ENTERPRISE = 'github-enterprise';
@@ -77,10 +90,6 @@ export const WORD_WRAP = 'wordWrap';
 // Comments
 export const COMMENTS = 'comments';
 export const OPEN_VIEW = 'openView';
-
-// Explorer
-export const EXPLORER = 'explorer';
-export const AUTO_REVEAL = 'autoReveal';
 
 // Workbench
 export const WORKBENCH = 'workbench';

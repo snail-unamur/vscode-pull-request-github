@@ -4,9 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import React, { useContext, useRef, useState } from 'react';
+import { CommentView } from './comment';
+import Diff from './diff';
+import { addIcon, checkIcon, circleFilledIcon, closeIcon, errorIcon, gitCommitIcon, gitMergeIcon, loadingIcon, tasklistIcon, threeBars } from './icon';
+import { nbsp } from './space';
+import { Timestamp } from './timestamp';
+import { AuthorLink, Avatar } from './user';
 import { IComment } from '../../src/common/comment';
 import {
 	AssignEvent,
+	BaseRefChangedEvent,
 	ClosedEvent,
 	CommentEvent,
 	CommitEvent,
@@ -26,12 +33,6 @@ import { groupBy, UnreachableCaseError } from '../../src/common/utils';
 import { IAccount, IActor } from '../../src/github/interface';
 import { ReviewType } from '../../src/github/views';
 import PullRequestContext from '../common/context';
-import { CommentView } from './comment';
-import Diff from './diff';
-import { commitIcon, errorIcon, loadingIcon, mergeIcon, plusIcon, tasklistIcon, threeBars } from './icon';
-import { nbsp } from './space';
-import { Timestamp } from './timestamp';
-import { AuthorLink, Avatar } from './user';
 
 function isAssignUnassignEvent(event: TimelineEvent | ConsolidatedAssignUnassignEvent): event is AssignEvent | UnassignEvent {
 	return event.event === EventType.Assigned || event.event === EventType.Unassigned;
@@ -89,6 +90,8 @@ export const Timeline = ({ events, isIssue }: { events: TimelineEvent[], isIssue
 				return <ClosedEventView key={`closed${event.id}`} event={event} isIssue={isIssue} />;
 			case EventType.Reopened:
 				return <ReopenedEventView key={`reopened${event.id}`} event={event} isIssue={isIssue} />;
+			case EventType.BaseRefChanged:
+				return <BaseRefChangedEventView key={`baseref${event.id}`} event={event} />;
 			case EventType.NewCommitsSinceReview:
 				return <NewCommitsSinceReviewEventView key={`newCommits${event.id}`} />;
 			case EventType.CopilotStarted:
@@ -104,6 +107,20 @@ export const Timeline = ({ events, isIssue }: { events: TimelineEvent[], isIssue
 };
 
 export default Timeline;
+
+
+function CommitStateIcon({ status }: { status: 'EXPECTED' | 'ERROR' | 'FAILURE' | 'PENDING' | 'SUCCESS' | undefined; }) {
+	switch (status) {
+		case 'PENDING':
+			return circleFilledIcon;
+		case 'SUCCESS':
+			return checkIcon;
+		case 'FAILURE':
+		case 'ERROR':
+			return closeIcon;
+	}
+	return null;
+}
 
 const CommitEventView = (event: CommitEvent) => {
 	const context = useContext(PullRequestContext);
@@ -122,7 +139,7 @@ const CommitEventView = (event: CommitEvent) => {
 	return (
 		<div className="comment-container commit">
 			<div className="commit-message">
-				{commitIcon}
+				{gitCommitIcon}
 				{nbsp}
 				<div className="avatar-container">
 					<Avatar for={event.author} />
@@ -139,6 +156,9 @@ const CommitEventView = (event: CommitEvent) => {
 				</div>
 			</div>
 			<div className="timeline-detail">
+				<div className='status-section'>
+					<CommitStateIcon status={event.status} />
+				</div>
 				<a
 					className="sha"
 					onClick={(e) => handleCommitClick(e, 'sha')}
@@ -169,7 +189,7 @@ const NewCommitsSinceReviewEventView = () => {
 	return (
 		<div className="comment-container commit">
 			<div className="commit-message">
-				{plusIcon}
+				{addIcon}
 				{nbsp}
 				<span style={{ fontWeight: 'bold' }}>New changes since your last Review</span>
 			</div>
@@ -269,7 +289,7 @@ function CommentThread({ thread, event }: { thread: IComment[]; event: ReviewEve
 }
 
 function AddReviewSummaryComment() {
-	const { requestChanges, approve, submit, pr } = useContext(PullRequestContext);
+	const { requestChanges, approve, submit, deleteReview, pr } = useContext(PullRequestContext);
 	const isAuthor = pr?.isAuthor;
 	const comment = useRef<HTMLTextAreaElement>();
 	const [isBusy, setBusy] = useState(false);
@@ -289,6 +309,13 @@ function AddReviewSummaryComment() {
 			default:
 				await submit(value);
 		}
+		setBusy(false);
+	}
+
+	async function cancelReview(event: React.MouseEvent): Promise<void> {
+		event.preventDefault();
+		setBusy(true);
+		await deleteReview();
 		setBusy(false);
 	}
 
@@ -317,6 +344,14 @@ function AddReviewSummaryComment() {
 				value={commentText}
 			></textarea>
 			<div className="form-actions">
+				<button
+					id="cancel-review"
+					className='secondary'
+					disabled={isBusy || pr?.busy}
+					onClick={cancelReview}
+				>
+					Cancel Review
+				</button>
 				{isAuthor ? null : (
 					<button
 						id="request-changes"
@@ -353,7 +388,7 @@ const MergedEventView = (event: MergedEvent) => {
 	return (
 		<div className="comment-container commit">
 			<div className="commit-message">
-				{mergeIcon}
+				{gitMergeIcon}
 				{nbsp}
 				<div className="avatar-container">
 					<Avatar for={event.user} />
@@ -427,13 +462,20 @@ const AssignUnassignEventView = ({ event }: { event: AssignEvent | UnassignEvent
 	const joinedAssignees = joinWithAnd(assignees.map(a => <AuthorLink key={`${a.id}a`} for={a} />));
 	const joinedUnassignees = joinWithAnd(unassignees.map(a => <AuthorLink key={`${a.id}u`} for={a} />));
 
+	// Check if actor is assigning/unassigning themselves
+	const isSelfAssign = assignees.length === 1 && assignees[0].login === actor.login;
+	const isSelfUnassign = unassignees.length === 1 && unassignees[0].login === actor.login;
+
 	let message: JSX.Element;
 	if (assignees.length > 0 && unassignees.length > 0) {
-		message = <>assigned {joinedAssignees} and unassigned {joinedUnassignees}</>;
+		// Handle mixed case with potential self-assignment
+		const assignMessage = isSelfAssign ? <>self-assigned this</> : <>assigned {joinedAssignees}</>;
+		const unassignMessage = isSelfUnassign ? <>removed their assignment</> : <>unassigned {joinedUnassignees}</>;
+		message = <>{assignMessage} and {unassignMessage}</>;
 	} else if (assignees.length > 0) {
-		message = <>assigned {joinedAssignees}</>;
+		message = isSelfAssign ? <>self-assigned this</> : <>assigned {joinedAssignees}</>;
 	} else {
-		message = <>unassigned {joinedUnassignees}</>;
+		message = isSelfUnassign ? <>removed their assignment</> : <>unassigned {joinedUnassignees}</>;
 	}
 
 	return (
@@ -478,6 +520,24 @@ const ReopenedEventView = ({ event, isIssue }: { event: ReopenedEvent, isIssue: 
 				</div>
 				<AuthorLink for={actor} />
 				<div className="message">{isIssue ? 'reopened this issue' : 'reopened this pull request'}</div>
+			</div>
+			<Timestamp date={createdAt} />
+		</div>
+	);
+};
+
+const BaseRefChangedEventView = ({ event }: { event: BaseRefChangedEvent }) => {
+	const { actor, createdAt, currentRefName, previousRefName } = event;
+	return (
+		<div className="comment-container commit">
+			<div className="commit-message">
+				<div className="avatar-container">
+					<Avatar for={actor} />
+				</div>
+				<AuthorLink for={actor} />
+				<div className="message">
+					changed the base branch from <code className="branch-tag">{previousRefName}</code> to <code className="branch-tag">{currentRefName}</code>
+				</div>
 			</div>
 			<Timestamp date={createdAt} />
 		</div>

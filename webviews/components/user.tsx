@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as React from 'react';
-import { IAccount, IActor, ITeam, reviewerLabel } from '../../src/github/interface';
 import { Icon } from './icon';
+import { IAccount, IActor, ITeam, reviewerLabel } from '../../src/github/interface';
 
 const InnerAvatar = ({ for: author }: { for: Partial<IAccount> }) => (
 	<>
-		{author.avatarUrl ? (
+		{author.avatarUrl && author.avatarUrl.includes('githubusercontent.com') ? (
 			<img className="avatar" src={author.avatarUrl} alt="" role="presentation" aria-hidden="true"/>
 		) : (
 			<Icon className="avatar-icon" src={require('../../resources/icons/dark/github.svg')} />

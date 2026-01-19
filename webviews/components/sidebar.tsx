@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { COPILOT_LOGINS } from '../../src/common/copilot';
-import { gitHubLabelColor } from '../../src/common/utils';
-import { IAccount, IMilestone, IProjectItem, reviewerId, reviewerLabel, ReviewState } from '../../src/github/interface';
-import { PullRequest } from '../../src/github/views';
-import PullRequestContext from '../common/context';
-import { Label } from '../common/label';
-import { AuthorLink, Avatar } from '../components/user';
 import { closeIcon, copilotIcon, settingsIcon } from './icon';
 import RadarChart from './radarChart';
 import { Reviewer } from './reviewer';
+import { COPILOT_LOGINS } from '../../src/common/copilot';
+import { gitHubLabelColor } from '../../src/common/utils';
+import { IAccount, IMilestone, IProjectItem, isITeam, reviewerId, reviewerLabel, ReviewState } from '../../src/github/interface';
+import { ChangeReviewersReply, PullRequest } from '../../src/github/views';
+import PullRequestContext from '../common/context';
+import { Label } from '../common/label';
+import { AuthorLink, Avatar } from '../components/user';
 
 function Section({
 	id,
@@ -56,9 +56,10 @@ function Section({
 	);
 }
 
-export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot, analysis }: PullRequest) {
+export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue, projectItems: projects, milestone, assignees, canAssignCopilot, canRequestCopilotReview, analysis }: PullRequest) {
 	const {
 		addReviewers,
+		addReviewerCopilot,
 		addAssignees,
 		addAssigneeYourself,
 		addAssigneeCopilot,
@@ -71,8 +72,10 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 	} = useContext(PullRequestContext);
 
 	const [assigningCopilot, setAssigningCopilot] = useState(false);
+	const [requestingCopilotReview, setRequestingCopilotReview] = useState(false);
 
 	const shouldShowCopilotButton = canAssignCopilot && assignees.every(assignee => !COPILOT_LOGINS.includes(assignee.login));
+	const shouldShowCopilotReviewButton = canRequestCopilotReview && reviewers.every(reviewer => !isITeam(reviewer.reviewer) && !COPILOT_LOGINS.includes(reviewer.reviewer.login));
 
 	const updateProjects = async () => {
 		const newProjects = await changeProjects();
@@ -86,10 +89,43 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 					id="reviewers"
 					title="Reviewers"
 					hasWritePermission={hasWritePermission}
-					onHeaderClick={async () => {
+					onHeaderClick={async (e) => {
+						const target = e?.target as HTMLElement;
+						if (target?.closest && target.closest('#request-copilot-review-btn')) {
+							return;
+						}
 						const newReviewers = await addReviewers();
 						updatePR({ reviewers: newReviewers.reviewers });
 					}}
+					iconButtonGroup={hasWritePermission && (
+						<div className="icon-button-group">
+							{shouldShowCopilotReviewButton ? (
+								<button
+									id="request-copilot-review-btn"
+									className="icon-button"
+									title="Request review from Copilot"
+									disabled={requestingCopilotReview}
+									onClick={async (e) => {
+										e.stopPropagation();
+										setRequestingCopilotReview(true);
+										try {
+											const newReviewers: ChangeReviewersReply = await addReviewerCopilot();
+											updatePR({ reviewers: newReviewers.reviewers });
+										} finally {
+											setRequestingCopilotReview(false);
+										}
+									}}>
+									{copilotIcon}
+								</button>
+							) : null}
+							<button
+								className="icon-button"
+								title="Add Reviewers"
+							>
+								{settingsIcon}
+							</button>
+						</div>
+					)}
 				>
 					{reviewers && reviewers.length ? (
 						reviewers.map(state => (
@@ -97,6 +133,9 @@ export default function Sidebar({ reviewers, labels, hasWritePermission, isIssue
 						))
 					) : (
 						<div className="section-placeholder">None yet</div>
+					)}
+					{!pr!.isDraft && (hasWritePermission || pr!.isAuthor) && (
+						<ConvertToDraft />
 					)}
 				</Section>
 			)}
@@ -303,12 +342,14 @@ function CollapsedLabel(props: PullRequest) {
 		</span>
 	);
 
-	const PillContainer = ({ items, getKey, getColor, getText }: {
-		items: any[],
-		getKey: (item: any) => string,
-		getColor: (item: any) => { backgroundColor: string; textColor: string; borderColor: string },
-		getText: (item: any) => string
-	}) => {
+	interface PillContainerProps<T> {
+		items: T[];
+		getKey: (item: T) => string;
+		getColor: (item: T) => { backgroundColor: string; textColor: string; borderColor: string };
+		getText: (item: T) => string;
+	}
+
+	const PillContainer = <T,>({ items, getKey, getColor, getText }: PillContainerProps<T>) => {
 		const containerRef = useRef<HTMLSpanElement>(null);
 		const [visibleCount, setVisibleCount] = useState(items.length);
 
@@ -396,7 +437,7 @@ function CollapsedLabel(props: PullRequest) {
 					items={labels}
 					getKey={l => l.name}
 					getColor={l => gitHubLabelColor(l.color, props?.isDarkTheme, false)}
-					getText={l => l.name}
+					getText={l => l.displayName}
 				/>
 			),
 			count: labels.length
@@ -550,6 +591,37 @@ function Project(project: IProjectItem & { canDelete: boolean }) {
 					</button>
 				) : null}
 			</div>
+		</div>
+	);
+}
+
+function ConvertToDraft() {
+	const { convertToDraft, updatePR, pr } = useContext(PullRequestContext);
+	const [isBusy, setBusy] = useState(false);
+
+	const handleConvertToDraft = async () => {
+		try {
+			setBusy(true);
+			const result = await convertToDraft();
+			updatePR({ isDraft: result.isDraft });
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="section-placeholder" style={{ marginTop: '8px' }}>
+			Still in progress?{' '}
+			<a
+				onClick={handleConvertToDraft}
+				style={{
+					pointerEvents: (isBusy || pr?.busy) ? 'none' : 'auto',
+					opacity: (isBusy || pr?.busy) ? 0.5 : 1,
+					cursor: 'pointer'
+				}}
+			>
+				Convert to draft
+			</a>
 		</div>
 	);
 }

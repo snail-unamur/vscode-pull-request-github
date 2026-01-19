@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
-import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 import {
 	GithubItemStateEnum,
 	IAccount,
@@ -21,6 +19,9 @@ import {
 	ReviewState,
 	StateReason,
 } from './interface';
+import { IComment } from '../common/comment';
+import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
+import { ImprovedPullRequestMetrics } from '../improvedPullRequest/improvedPullRequestMetrics';
 
 export enum ReviewType {
 	Comment = 'comment',
@@ -67,6 +68,7 @@ export interface Issue {
 	isDarkTheme: boolean;
 	isEnterprise: boolean;
 	canAssignCopilot: boolean;
+	canRequestCopilotReview: boolean;
 	reactions: Reaction[];
 	busy?: boolean;
 }
@@ -82,6 +84,7 @@ export interface PullRequest extends Issue {
 	commitsCount: number;
 	projectItems: IProjectItem[] | undefined;
 	repositoryDefaultBranch: string;
+	doneCheckoutBranch: string;
 	emailForCommit?: string;
 	pendingReviewType?: ReviewType;
 	status: PullRequestChecks | null;
@@ -110,6 +113,7 @@ export interface PullRequest extends Issue {
 	busy?: boolean;
 	loadingCommit?: string;
 	analysis: ImprovedPullRequestMetrics;
+	generateDescriptionTitle?: string;
 }
 
 export interface ProjectItemsReply {
@@ -121,10 +125,25 @@ export interface ChangeAssigneesReply {
 	events: TimelineEvent[];
 }
 
+export interface ChangeReviewersReply {
+	reviewers: ReviewState[];
+}
+
 export interface SubmitReviewReply {
 	events?: TimelineEvent[];
 	reviewedEvent: ReviewEvent | CommentEvent;
 	reviewers?: ReviewState[];
+}
+
+export interface ReadyForReviewReply {
+	isDraft: boolean;
+	reviewEvent?: ReviewEvent;
+	reviewers?: ReviewState[];
+	autoMerge?: boolean;
+}
+
+export interface ConvertToDraftReply {
+	isDraft: boolean;
 }
 
 export interface MergeArguments {
@@ -140,11 +159,20 @@ export interface MergeResult {
 	events?: TimelineEvent[];
 }
 
+export interface DeleteReviewResult {
+	deletedReviewId: number;
+	deletedReviewComments: IComment[];
+}
+
 export enum PreReviewState {
 	None = 0,
 	Available,
 	ReviewedWithComments,
 	ReviewedWithoutComments
+}
+
+export interface ChangeTemplateReply {
+	description: string;
 }
 
 export interface CancelCodingAgentReply {
@@ -156,8 +184,15 @@ export interface OverviewContext {
 	owner: string;
 	repo: string;
 	number: number;
+	[key: string]: boolean | string | number;
 }
 
 export interface CodingAgentContext extends SessionLinkInfo {
 	'preventDefaultContextMenuItems': true;
+	[key: string]: boolean | string | number | undefined;
+}
+
+export interface ChangeBaseReply {
+	base: string;
+	events: TimelineEvent[];
 }

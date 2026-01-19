@@ -51,6 +51,11 @@ export interface ReadyForReview {
 	allowAutoMerge: boolean;
 }
 
+export interface ConvertToDraft {
+	isDraft: boolean;
+	mergeable: PullRequestMergeability;
+}
+
 export interface IActor {
 	login: string;
 	avatarUrl?: string;
@@ -261,7 +266,7 @@ export interface Notification {
 	};
 	reason: string;
 	unread: boolean;
-	updatedAd: Date;
+	updatedAt: Date;
 	lastReadAt: Date | undefined;
 }
 

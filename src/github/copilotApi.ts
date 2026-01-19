@@ -4,53 +4,29 @@
  *--------------------------------------------------------------------------------------------*/
 
 import fetch from 'cross-fetch';
-import JSZip from 'jszip';
 import * as vscode from 'vscode';
+import { CredentialStore } from './credentials';
+import { LoggingOctokit } from './loggingOctokit';
+import { hasEnterpriseUri } from './utils';
 import { AuthProvider } from '../common/authentication';
-import { COPILOT_SWE_AGENT } from '../common/copilot';
 import Logger from '../common/logger';
 import { ITelemetry } from '../common/telemetry';
-import { CredentialStore, GitHub } from './credentials';
-import { PRType } from './interface';
-import { LoggingOctokit } from './loggingOctokit';
-import { PullRequestModel } from './pullRequestModel';
-import { RepositoriesManager } from './repositoriesManager';
-import { hasEnterpriseUri } from './utils';
 
-const LEARN_MORE_URL = 'https://aka.ms/coding-agent-docs';
-const PREMIUM_REQUESTS_URL = 'https://docs.github.com/en/copilot/concepts/copilot-billing/understanding-and-managing-requests-in-copilot#what-are-premium-requests';
-
-export interface RemoteAgentJobPayload {
-	problem_statement: string;
-	event_type: string;
-	pull_request?: {
-		title?: string;
-		body_placeholder?: string;
-		body_suffix?: string;
-		base_ref?: string;
-		head_ref?: string;
-	};
-	run_name?: string;
-}
-
-export interface RemoteAgentJobResponse {
-	pull_request: {
-		html_url: string;
+/**
+ * This is temporary for the migration of CCA only.
+ * Once fully migrated we can rename to ChatSessionWithPR and remove the old one.
+ **/
+export interface CrossChatSessionWithPR extends vscode.ChatSessionItem {
+	pullRequestDetails: {
+		id: string;
 		number: number;
-	}
-	session_id: string;
-}
-
-export interface ChatSessionWithPR extends vscode.ChatSessionItem {
-	pullRequest: PullRequestModel;
-}
-
-export interface ChatSessionFromSummarizedChat extends vscode.ChatSessionItem {
-	prompt: string;
-	summary?: string;
-	// Cache
-	pullRequest?: PullRequestModel;
-	sessionInfo?: SessionInfo;
+		repository: {
+			owner: {
+				login: string;
+			};
+			name: string;
+		};
+	};
 }
 
 export class CopilotApi {
@@ -59,7 +35,6 @@ export class CopilotApi {
 	constructor(
 		private octokit: LoggingOctokit,
 		private token: string,
-		private credentialStore: CredentialStore,
 		private telemetry: ITelemetry
 	) { }
 
@@ -75,121 +50,6 @@ export class CopilotApi {
 		return this.makeApiCallFullUrl(`${this.baseUrl}${api}`, init);
 	}
 
-	async postRemoteAgentJob(
-		owner: string,
-		name: string,
-		payload: RemoteAgentJobPayload,
-	): Promise<RemoteAgentJobResponse> {
-		const repoSlug = `${owner}/${name}`;
-		const apiUrl = `/agents/swe/v0/jobs/${repoSlug}`;
-		let status: number | undefined;
-		Logger.trace(`postRemoteAgentJob: Posting job to ${apiUrl} with payload: ${JSON.stringify(payload)}`, CopilotApi.ID);
-		try {
-			const response = await this.makeApiCall(apiUrl, {
-				method: 'POST',
-				headers: {
-					'Copilot-Integration-Id': 'copilot-developer-dev',
-					'Authorization': `Bearer ${this.token}`,
-					'Content-Type': 'application/json',
-					'Accept': 'application/json'
-				},
-				body: JSON.stringify(payload)
-			});
-
-			status = response.status;
-			if (!response.ok) {
-				throw new Error(await this.formatRemoteAgentJobError(status, repoSlug, response));
-			}
-
-			const data = await response.json();
-			this.validateRemoteAgentJobResponse(data);
-			/*
-				__GDPR__
-				"remoteAgent.postRemoteAgentJob" : {
-					"status" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-				}
-			*/
-			this.telemetry.sendTelemetryEvent('remoteAgent.postRemoteAgentJob', {
-				status: status.toString(),
-			});
-			return data;
-		} catch (error) {
-			/* __GDPR__
-				"remoteAgent.postRemoteAgentJob" : {
-					"status" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-				}
-			*/
-			this.telemetry.sendTelemetryErrorEvent('remoteAgent.postRemoteAgentJob', {
-				status: status?.toString() || '999',
-			});
-			throw error;
-		}
-	}
-
-	// https://github.com/github/sweagentd/blob/371ea6db280b9aecf790ccc20660e39a7ecb8d1c/internal/api/jobapi/handler.go#L110-L120
-	private async formatRemoteAgentJobError(status: number, repoSlug: string, response: Response): Promise<string> {
-		Logger.error(`Error in remote agent job: ${await response.text()}`, CopilotApi.ID);
-		switch (status) {
-			case 400:
-				return vscode.l10n.t('Bad request');
-			case 401:
-				return vscode.l10n.t('Unauthorized');
-			case 402:
-				return vscode.l10n.t('[Premium request]({0}) quota exceeded', PREMIUM_REQUESTS_URL);
-			case 403:
-				return vscode.l10n.t('[GitHub coding agent]({0}) is not enabled for repository \'{1}\'', LEARN_MORE_URL, repoSlug);
-			case 404:
-				return vscode.l10n.t('Repository \'{0}\' not found', repoSlug);
-			case 409:
-				return vscode.l10n.t('A coding agent pull request already exists');
-			case 500:
-				return vscode.l10n.t('Server error. Please see logs for details.');
-			default:
-				return vscode.l10n.t('Error: {0}. Please see logs for details', status);
-		}
-	}
-
-	private validateRemoteAgentJobResponse(data: any): asserts data is RemoteAgentJobResponse {
-		if (!data || typeof data !== 'object') {
-			throw new Error('Invalid response from coding agent');
-		}
-		if (!data.pull_request || typeof data.pull_request !== 'object') {
-			throw new Error('Invalid pull_request in response');
-		}
-		if (typeof data.pull_request.html_url !== 'string') {
-			throw new Error('Invalid pull_request.html_url in response');
-		}
-		if (typeof data.pull_request.number !== 'number') {
-			throw new Error('Invalid pull_request.number in response');
-		}
-		if (typeof data.session_id !== 'string') {
-			throw new Error('Invalid session_id in response');
-		}
-	}
-
-	public async getLogsFromZipUrl(logsUrl: string): Promise<string[]> {
-		const logsZip = await this.makeApiCallFullUrl(logsUrl, {
-			headers: {
-				Authorization: `Bearer ${this.token}`,
-				Accept: 'application/json',
-			},
-		});
-		if (!logsZip.ok) {
-			throw new Error(`Failed to fetch logs zip: ${logsZip.statusText}`);
-		}
-		const logsText = await logsZip.arrayBuffer();
-		const copilotSteps: string[] = [];
-		const zip = await JSZip.loadAsync(logsText);
-		for (const fileName of Object.keys(zip.files)) {
-			const file = zip.files[fileName];
-			if (!file.dir && fileName.endsWith('Processing Request.txt')) {
-				const content = await file.async('string');
-				copilotSteps.push(...content.split('\n'));
-			}
-		}
-		return copilotSteps;
-	}
-
 	public async getAllSessions(pullRequestId: number | undefined): Promise<SessionInfo[]> {
 		const response = await this.makeApiCall(
 			pullRequestId
@@ -202,92 +62,34 @@ export class CopilotApi {
 				},
 			});
 		if (!response.ok) {
-			throw new Error(`Failed to fetch sessions: ${response.statusText}`);
+			await this.handleApiError(response, 'getAllSessions');
 		}
 		const sessions = await response.json();
 		return sessions.sessions;
 	}
 
-	public async getAllCodingAgentPRs(repositoriesManager: RepositoriesManager): Promise<PullRequestModel[]> {
-		const hub = this.getHub();
-		const username = (await hub?.currentUser)?.login;
-		if (!username) {
-			Logger.error('Failed to get GitHub username from auth provider', CopilotApi.ID);
-			return [];
-		}
-		const query = `is:open author:${COPILOT_SWE_AGENT}[bot] assignee:${username} is:pr repo:\${owner}/\${repository}`;
-		const allItems = await Promise.all(
-			repositoriesManager.folderManagers.map(async fm => {
-				const result = await fm.getPullRequests(PRType.Query, undefined, query);
-				return result.items;
-			})
-		);
-		return allItems.flat();
-	}
-
-	public async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-		const response = await this.makeApiCall(`/agents/sessions/${sessionId}`, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${this.token}`,
-				'Accept': 'application/json'
-			}
-		});
-		if (!response.ok) {
-			throw new Error(`Failed to fetch session: ${response.statusText}`);
-		}
-
-		return (await response.json()) as SessionInfo;
-	}
-
-	public async getLogsFromSession(sessionId: string): Promise<string> {
-		const logsResponse = await this.makeApiCall(`/agents/sessions/${sessionId}/logs`, {
-			method: 'GET',
-			headers: {
-				'Authorization': `Bearer ${this.token}`,
-				'Content-Type': 'application/json',
-			},
-		});
-		if (!logsResponse.ok) {
-			throw new Error(`Failed to fetch logs: ${logsResponse.statusText}`);
-		}
-		return await logsResponse.text();
-	}
-
-	public async getJobBySessionId(owner: string, repo: string, sessionId: string): Promise<JobInfo | undefined> {
+	private async handleApiError(response: Response, action: string): Promise<never> {
+		let errorBody: string | undefined = undefined;
 		try {
-			const response = await this.makeApiCall(`/agents/swe/v0/jobs/${owner}/${repo}/session/${sessionId}`, {
-				method: 'GET',
-				headers: {
-					'Copilot-Integration-Id': 'copilot-developer-dev',
-					'Authorization': `Bearer ${this.token}`,
-					'Content-Type': 'application/json',
-					'Accept': 'application/json'
-				}
-			});
-			if (!response.ok) {
-				Logger.warn(`Failed to fetch job info for session ${sessionId}: ${response.statusText}`, CopilotApi.ID);
-				return undefined;
+			errorBody = await response.text();
+		} catch (e) { /* ignore */ }
+		const msg = `'${action}' failed with ${response.statusText} ${errorBody ? `: ${errorBody}` : ''}`;
+		Logger.error(msg, CopilotApi.ID);
+
+		/* __GDPR__
+			"remoteAgent.apiError" : {
+				"action" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
+				"status" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
+				"body" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 			}
-			const data = await response.json() as JobInfo;
-			return data;
-		} catch (error) {
-			Logger.warn(`Error fetching job info for session ${sessionId}: ${error}`, CopilotApi.ID);
-			return undefined;
-		}
-	}
+		*/
+		this.telemetry.sendTelemetryErrorEvent('remoteAgent.apiError', {
+			action,
+			status: response.status.toString(),
+			body: errorBody || '',
+		});
 
-	private getHub(): GitHub | undefined {
-		let authProvider: AuthProvider | undefined;
-		if (this.credentialStore.isAuthenticated(AuthProvider.githubEnterprise) && hasEnterpriseUri()) {
-			authProvider = AuthProvider.githubEnterprise;
-		} else if (this.credentialStore.isAuthenticated(AuthProvider.github)) {
-			authProvider = AuthProvider.github;
-		} else {
-			return;
-		}
-
-		return this.credentialStore.getHub(authProvider);
+		throw new Error(msg);
 	}
 }
 
@@ -313,39 +115,6 @@ export interface SessionInfo {
 	error: string | null;
 }
 
-export interface SessionSetupStep {
-	name: string;
-	status: 'completed' | 'in_progress' | 'queued';
-}
-
-export interface JobInfo {
-	job_id: string;
-	session_id: string;
-	problem_statement: string;
-	content_filter_mode?: string;
-	status: string;
-	result?: string;
-	actor: {
-		id: number;
-		login: string;
-	};
-	created_at: string;
-	updated_at: string;
-	pull_request: {
-		id: number;
-		number: number;
-	};
-	workflow_run?: {
-		id: number;
-	};
-	error?: {
-		message: string;
-	};
-	event_type?: string;
-	event_url?: string;
-	event_identifiers?: string[];
-}
-
 export async function getCopilotApi(credentialStore: CredentialStore, telemetry: ITelemetry, authProvider?: AuthProvider): Promise<CopilotApi | undefined> {
 	if (!authProvider) {
 		if (credentialStore.isAuthenticated(AuthProvider.githubEnterprise) && hasEnterpriseUri()) {
@@ -363,5 +132,5 @@ export async function getCopilotApi(credentialStore: CredentialStore, telemetry:
 	}
 
 	const { token } = await github.octokit.api.auth() as { token: string };
-	return new CopilotApi(github.octokit, token, credentialStore, telemetry);
+	return new CopilotApi(github.octokit, token, telemetry);
 }

@@ -4,19 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { ContextDropdown } from './contextDropdown';
+import { copyIcon, editIcon, quoteIcon, sparkleIcon, stopCircleIcon, trashIcon } from './icon';
+import { nbsp, Spaced } from './space';
+import { Timestamp } from './timestamp';
+import { AuthorLink, Avatar } from './user';
 import { IComment } from '../../src/common/comment';
 import { CommentEvent, EventType, ReviewEvent } from '../../src/common/timelineEvent';
 import { GithubItemStateEnum } from '../../src/github/interface';
 import { PullRequest, ReviewType } from '../../src/github/views';
 import { ariaAnnouncementForReview } from '../common/aria';
+import { COMMENT_TEXTAREA_ID } from '../common/constants';
 import PullRequestContext from '../common/context';
 import emitter from '../common/events';
 import { useStateProp } from '../common/hooks';
-import { ContextDropdown } from './contextDropdown';
-import { deleteIcon, editIcon, quoteIcon } from './icon';
-import { nbsp, Spaced } from './space';
-import { Timestamp } from './timestamp';
-import { AuthorLink, Avatar } from './user';
 
 export type Props = {
 	headerInEditMode?: boolean;
@@ -48,6 +49,7 @@ export function CommentView(commentProps: Props) {
 	const currentDraft = pr?.pendingCommentDrafts && pr.pendingCommentDrafts[id];
 	const [inEditMode, setEditMode] = useState(!!currentDraft);
 	const [showActionBar, setShowActionBar] = useState(false);
+	const commentUrl = (comment as Partial<IComment | ReviewEvent | CommentEvent>).htmlUrl || (comment as PullRequest).url;
 
 	if (inEditMode) {
 		return React.cloneElement(headerInEditMode ? <CommentBox for={comment} /> : <></>, {}, [
@@ -55,6 +57,7 @@ export function CommentView(commentProps: Props) {
 				id={id}
 				key={`editComment${id}`}
 				body={currentDraft || bodyMd}
+				isPRDescription={isPRDescription}
 				onCancel={() => {
 					if (pr?.pendingCommentDrafts) {
 						delete pr.pendingCommentDrafts[id];
@@ -96,6 +99,15 @@ export function CommentView(commentProps: Props) {
 				>
 					{quoteIcon}
 				</button>
+				{commentUrl ? (
+					<button
+						title="Copy Comment Link"
+						className="icon-button"
+						onClick={() => navigator.clipboard.writeText(commentUrl)}
+					>
+						{copyIcon}
+					</button>
+				) : null}
 				{canEdit ? (
 					<button title="Edit comment" className="icon-button" onClick={() => setEditMode(true)}>
 						{editIcon}
@@ -107,7 +119,7 @@ export function CommentView(commentProps: Props) {
 						className="icon-button"
 						onClick={() => deleteComment({ id, pullRequestReviewId })}
 					>
-						{deleteIcon}
+						{trashIcon}
 					</button>
 				) : null}
 			</div>
@@ -143,13 +155,14 @@ function isIComment(comment: any): comment is IComment {
 }
 
 const DESCRIPTORS = {
+	REQUESTED: 'will review',
 	PENDING: 'will review',
 	COMMENTED: 'reviewed',
 	CHANGES_REQUESTED: 'requested changes',
 	APPROVED: 'approved',
 };
 
-const reviewDescriptor = (state: string) => DESCRIPTORS[state] || 'reviewed';
+const reviewDescriptor = (state: keyof typeof DESCRIPTORS) => DESCRIPTORS[state];
 
 function CommentBox({ for: comment, onFocus, onMouseEnter, onMouseLeave, children }: CommentBoxProps) {
 	const asNotPullRequest = comment as Partial<IComment | ReviewEvent | CommentEvent>;
@@ -197,14 +210,16 @@ type FormInputSet = {
 type EditCommentProps = {
 	id: number;
 	body: string;
+	isPRDescription?: boolean;
 	onCancel: () => void;
 	onSave: (body: string) => Promise<any>;
 };
 
-function EditComment({ id, body, onCancel, onSave }: EditCommentProps) {
-	const { updateDraft } = useContext(PullRequestContext);
+function EditComment({ id, body, isPRDescription, onCancel, onSave }: EditCommentProps) {
+	const { updateDraft, pr, generateDescription, cancelGenerateDescription } = useContext(PullRequestContext);
 	const draftComment = useRef<{ body: string; dirty: boolean }>({ body, dirty: false });
 	const form = useRef<HTMLFormElement>();
+	const [isGenerating, setIsGenerating] = useState(false);
 
 	useEffect(() => {
 		const interval = setInterval(() => {
@@ -246,15 +261,63 @@ function EditComment({ id, body, onCancel, onSave }: EditCommentProps) {
 
 	const onInput = useCallback(
 		e => {
-			draftComment.current.body = (e.target as any).value;
+			draftComment.current.body = e.target.value;
 			draftComment.current.dirty = true;
 		},
 		[draftComment],
 	);
 
+	const handleGenerateDescription = useCallback(async () => {
+		if (!generateDescription) {
+			return;
+		}
+		setIsGenerating(true);
+		try {
+			const generated = await generateDescription();
+			if (generated?.description && form.current) {
+				const textarea = form.current.markdown as HTMLTextAreaElement;
+				textarea.value = generated.description;
+				draftComment.current.body = generated.description;
+				draftComment.current.dirty = true;
+			}
+		} finally {
+			setIsGenerating(false);
+		}
+	}, [generateDescription]);
+
+	const handleCancelGenerate = useCallback(() => {
+		if (cancelGenerateDescription) {
+			cancelGenerateDescription();
+		}
+		setIsGenerating(false);
+	}, [cancelGenerateDescription]);
+
 	return (
 		<form ref={form as React.MutableRefObject<HTMLFormElement>} onSubmit={onSubmit}>
-			<textarea name="markdown" defaultValue={body} onKeyDown={onKeyDown} onInput={onInput} />
+			<div className="textarea-wrapper">
+				<textarea name="markdown" defaultValue={body} onKeyDown={onKeyDown} onInput={onInput} disabled={isGenerating} />
+				{isPRDescription ? (
+					isGenerating ? (
+						<button
+							type="button"
+							title="Cancel"
+							className="title-action icon-button"
+							onClick={handleCancelGenerate}
+						>
+							{stopCircleIcon}
+						</button>
+					) : (
+						<button
+							type="button"
+							title={pr?.generateDescriptionTitle || 'Generate description'}
+							className="title-action icon-button"
+							onClick={handleGenerateDescription}
+						>
+							{sparkleIcon}
+						</button>
+					)
+				) : null}
+			</div>
 			<div className="form-actions">
 				<button className="secondary" onClick={onCancel}>
 					Cancel
@@ -365,7 +428,7 @@ export function AddComment({
 		textareaRef.current?.focus();
 	});
 
-	const closeButton = e => {
+	const closeButton: React.MouseEventHandler<HTMLButtonElement> = e => {
 		e.preventDefault();
 		const { value } = textareaRef.current!;
 		close(value);
@@ -424,10 +487,10 @@ export function AddComment({
 	return (
 		<form id="comment-form" ref={form as React.MutableRefObject<HTMLFormElement>} className="comment-form main-comment-form" >
 			<textarea
-				id="comment-textarea"
+				id={COMMENT_TEXTAREA_ID}
 				name="body"
 				ref={textareaRef as React.MutableRefObject<HTMLTextAreaElement>}
-				onInput={({ target }) => updatePR({ pendingCommentText: (target as any).value })}
+				onInput={({ target }) => updatePR({ pendingCommentText: (target as HTMLTextAreaElement).value })}
 				onKeyDown={onKeyDown}
 				value={pendingCommentText}
 				placeholder="Leave a comment"
@@ -459,11 +522,11 @@ export function AddComment({
 					defaultOptionValue={() => currentSelection}
 					allOptions={() => {
 						const actions: { label: string; value: string; optionDisabled: boolean; action: (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => void }[] = [];
-						if (availableActions.approve) {
-							actions.push({ label: availableActions[ReviewType.Approve]!, value: ReviewType.Approve, action: () => submitAction(ReviewType.Approve), optionDisabled: shouldDisableApproveButton });
-						}
 						if (availableActions.comment) {
 							actions.push({ label: availableActions[ReviewType.Comment]!, value: ReviewType.Comment, action: () => submitAction(ReviewType.Comment), optionDisabled: shouldDisableNonApproveButtons });
+						}
+						if (availableActions.approve) {
+							actions.push({ label: availableActions[ReviewType.Approve]!, value: ReviewType.Approve, action: () => submitAction(ReviewType.Approve), optionDisabled: shouldDisableApproveButton });
 						}
 						if (availableActions.requestChanges) {
 							actions.push({ label: availableActions[ReviewType.RequestChanges]!, value: ReviewType.RequestChanges, action: () => submitAction(ReviewType.RequestChanges), optionDisabled: shouldDisableNonApproveButtons });
@@ -474,6 +537,7 @@ export function AddComment({
 					disabled={isBusy || busy}
 					hasSingleAction={Object.keys(availableActions).length === 1}
 					spreadable={true}
+					primaryOptionValue={ReviewType.Comment}
 				/>
 			</div>
 		</form>
@@ -495,7 +559,7 @@ const COMMENT_METHODS = {
 };
 
 const makeCommentMenuContext = (availableActions: { comment?: string, approve?: string, requestChanges?: string }, pendingCommentText: string | undefined, shouldDisableNonApproveButtons: boolean) => {
-	const createMenuContexts = {
+	const createMenuContexts: Record<string, boolean | string> = {
 		'preventDefaultContextMenuItems': true,
 		'github:reviewCommentMenu': true,
 	};
@@ -590,7 +654,7 @@ export const AddCommentSimple = (pr: PullRequest) => {
 	return (
 		<span className="comment-form">
 			<textarea
-				id="comment-textarea"
+				id={COMMENT_TEXTAREA_ID}
 				name="body"
 				placeholder="Leave a comment"
 				ref={textareaRef as React.MutableRefObject<HTMLTextAreaElement>}
@@ -607,11 +671,11 @@ export const AddCommentSimple = (pr: PullRequest) => {
 					defaultOptionValue={() => currentSelection}
 					allOptions={() => {
 						const actions: { label: string; value: string; optionDisabled: boolean; action: (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => void }[] = [];
-						if (availableActions.approve) {
-							actions.push({ label: availableActions[ReviewType.Approve]!, value: ReviewType.Approve, action: () => submitAction(ReviewType.Approve), optionDisabled: shouldDisableApproveButton });
-						}
 						if (availableActions.comment) {
 							actions.push({ label: availableActions[ReviewType.Comment]!, value: ReviewType.Comment, action: () => submitAction(ReviewType.Comment), optionDisabled: shouldDisableNonApproveButtons });
+						}
+						if (availableActions.approve) {
+							actions.push({ label: availableActions[ReviewType.Approve]!, value: ReviewType.Approve, action: () => submitAction(ReviewType.Approve), optionDisabled: shouldDisableApproveButton });
 						}
 						if (availableActions.requestChanges) {
 							actions.push({ label: availableActions[ReviewType.RequestChanges]!, value: ReviewType.RequestChanges, action: () => submitAction(ReviewType.RequestChanges), optionDisabled: shouldDisableNonApproveButtons });
@@ -622,6 +686,7 @@ export const AddCommentSimple = (pr: PullRequest) => {
 					disabled={isBusy || pr.busy}
 					hasSingleAction={Object.keys(availableActions).length === 1}
 					spreadable={true}
+					primaryOptionValue={ReviewType.Comment}
 				/>
 			</div>
 		</span>

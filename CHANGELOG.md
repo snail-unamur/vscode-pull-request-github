@@ -1,5 +1,179 @@
 # Changelog
 
+## 0.126.0
+
+### Changes
+
+- A multi-diff editor can be opened for a pull request by URI. For example, `vscode-insiders://github.vscode-pull-request-github/open-pull-request-changes?uri=https://github.com/microsoft/vscode-css-languageservice/pull/460`.
+- There's an option to "Checkout on Codespace" from the pull request description webview.
+- ctrl/cmd + R when the pull request description webview is focused will refresh the webview.
+- You can "Reveal in Explorer" from files in the "Changes in Pull Request" view and the "Pull Requests" views.
+- Commit SHAs in PR file comments will be linkified.
+- Set `"githubPullRequests.pullRequestDescription": "branchName"` to have the pull request title pre-filled with the branch name when creating a new pull request.
+- The command "GitHub Issues: Open Issue on GitHub" can be used when your cursor is in an issue reference (e.g., `#1234`) in a text file to open the issue on GitHub.
+- Set `"githubPullRequests.commentExpandState": "collapsePreexisting"` to have pre-existing comments collapsed by default when opening a pull request description webview, while new comments remain expanded.
+- Choose which PR template to use when creating a new pull request (requires that `"githubPullRequests.pullRequestDescription": "template"` is set).
+
+![Button to change pull request template](./documentation/changelog/0.126.0/change-pr-template.png)
+
+- Metadata from issue templates (e.g., `assignees`, `labels`) is now applied when creating a new issue from a template.
+- Issues created from `TODO` comments are assigned to the current user by default.
+- `"githubPullRequests.createOnPublishBranch"` can be set to `"always"` to always create a pull request when publishing a branch.
+- Open pull requests can be converted to drafts from the pull request description webview.
+
+![Convert to draft](./documentation/changelog/0.126.0/convert-to-draft.png)
+
+- We attempt to unwrap shortened commit lines in the pull request description webview to improve readability.
+- Copilot can generate descriptions for existing pull requests. "Edit" the description then use the sparkle icon to have Copilot generate a description.
+
+![Generate description for an existing pull request](./documentation/changelog/0.126.0/generate-existing-description.png)
+
+- Instead of checking out the default branch when you're done with a PR, you can configure that the PR base branch is checked out with `"githubPullRequests.postDone": "checkoutPullRequestBaseBranch"`.
+- You can change the base branch of a PR from the pull request description webview.
+
+![Change base branch](./documentation/changelog/0.126.0/change-base-branch.png)
+
+- PR branches can be configured to be automatically deleted when the PR is merged from this extension with the setting `"githubPullRequests.deleteBranchAfterMerge": true`.
+- When opening a folder for the first time, existing PR branches will be discovered and added to the "Local Pull Request Branches" view.
+
+### Fixes
+
+- Switch branch quick pick is not showing all branches. https://github.com/microsoft/vscode-pull-request-github/issues/8351
+- Auto-merge options aren't properly updated when base repo changes. https://github.com/microsoft/vscode-pull-request-github/issues/8195
+- Required check item renders strangely. https://github.com/microsoft/vscode-pull-request-github/issues/8176
+- Request review from Copilot. https://github.com/microsoft/vscode-pull-request-github/issues/6830
+- Make clear in which repo a pull request is stored. https://github.com/microsoft/vscode-pull-request-github/issues/6674
+- Show Changes Since Last Review should not consider pending reviews as "Last Review". https://github.com/microsoft/vscode-pull-request-github/issues/6226
+- Extension mistakenly thinks I'm using GH Enterprise with global "url aliasing". https://github.com/microsoft/vscode-pull-request-github/issues/4551
+
+## 0.124.1
+
+### Fixes
+
+- Want links to repo from recent agent sessions in empty workspace. https://github.com/microsoft/vscode/issues/281345
+
+## 0.124.0
+
+### Changes
+
+- The active pull request or issue webview title is now included as implicit context when using Copilot Chat. You can click on the implicit context item to include all the PR information in your prompt.
+
+![Pull request title as implicit context in Chat](./documentation/changelog/0.124.0/pull-request-implicit-context.png)
+
+- Pull request and issue context can also be manually added to Chat from the "Add Context" menu.
+
+![Explicit Chat context](./documentation/changelog/0.124.0/explicit-chat-context.png)
+
+- Single button for marking Copilot pull requests as ready for review, approved, and automerge (if enabled).
+
+![Single button to mark Copilot pull requests](./documentation/changelog/0.124.0/single-button-copilot-pr.png)
+
+- The "Copy link" action for individual comments shows in the pull request description webview.
+- Comments that are part of an un-submitted review (only visible to you) now show with at "comment draft" icon in the editor gutter and in the Comments view.
+- For commits where checks have run, the commit status icon now shows next to each commit in the pull request description webview.
+
+### Fixes
+
+- Comments don't show when PR is on non-default repo. https://github.com/microsoft/vscode-pull-request-github/issues/8050
+- ignoreSubmodules is honored differently for Pull Requests and Issues view. https://github.com/microsoft/vscode-pull-request-github/issues/7741
+
+**_Thank You_**
+
+* [@vicky1999 (Vignesh)](https://github.com/vicky1999)
+  * fix: message wrapping in narrow editor panes [PR #8121](https://github.com/microsoft/vscode-pull-request-github/pull/8121)
+  * feat: Display commit status icon for each commit [PR #8142](https://github.com/microsoft/vscode-pull-request-github/pull/8142)
+  * feat: Add copy comment link button in PR overview [PR #8150](https://github.com/microsoft/vscode-pull-request-github/pull/8150)
+
+## 0.122.1
+
+### Fixes
+
+- Only one reviewer can be seen on the PR page. https://github.com/microsoft/vscode-pull-request-github/issues/8131
+- Drop down not doing anything. https://github.com/microsoft/vscode-pull-request-github/issues/8149
+- Pull in icon fixes. https://github.com/microsoft/vscode-pull-request-github/issues/8159
+
+## 0.122.0
+
+### Changes
+
+- Auto-generated PR descriptions (via `githubPullRequests.pullRequestDescription`) will respect the repository PR template if there is one.
+- Icons in the Pull Requests view now render with codicons instead of Unicode characters.
+- Drafts in the Pull Requests view now render in italics instead of having a `[DRAFT]` prefix.
+
+![Pull Requests view showing codicon labels and italic draft PR titles](./documentation/changelog/0.122.0/pr-labels.png)
+
+- Emoji completions for `:smile:` style emojis are now available in review comments.
+
+![Emoji completions in review comments](./documentation/changelog/0.122.0/emoji-completions.gif)
+
+- [Markdown alert syntax](https://github.com/orgs/community/discussions/16925) is now rendered in review comments.
+
+![Markdown alerts in review comments](./documentation/changelog/0.122.0/markdown-alerts.png)
+
+- Opening an empty commit from a pull request webview shows an editor with a message instead of showing a notification.
+- Pull requests can be opened from from a url, for example: `vscode-insiders://github.vscode-pull-request-github/checkout-pull-request?uri=https://github.com/microsoft/vscode-css-languageservice/pull/460`
+- Icons are up-to-date with VS Code's latest icons.
+- If you start a review and want to cancel it, there's now a "Cancel Review" button in the pull request webview.
+
+![Cancel review button](./documentation/changelog/0.122.0/cancel-review.png)
+
+### Fixes
+
+- Reactions to code comments are not showing up (Web). https://github.com/microsoft/vscode-pull-request-github/issues/2195
+- Editing a comment freezes VS Code. https://github.com/microsoft/vscode/issues/274455
+- Github Pull Request tab won't open if branch names are reused. https://github.com/microsoft/vscode-pull-request-github/issues/8007
+- Icons are misaligned. https://github.com/microsoft/vscode-pull-request-github/issues/7998
+- "Git is not installed or otherwise not available" even though it is. https://github.com/microsoft/vscode-pull-request-github/issues/5454
+
+**_Thank You_**
+
+* [@bendrucker (Ben Drucker)](https://github.com/bendrucker): Enable all LLM tools in prompts (agent mode) [PR #6956](https://github.com/microsoft/vscode-pull-request-github/pull/6956)
+* [@gerardbalaoro (Gerard Balaoro)](https://github.com/gerardbalaoro): Make branch list timeout configurable (#2840) [PR #7927](https://github.com/microsoft/vscode-pull-request-github/pull/7927)
+* [@wankun-tcj](https://github.com/wankun-tcj): Fix avatar display issue in Pull Request tree view [PR #7851](https://github.com/microsoft/vscode-pull-request-github/pull/7851)
+
+## 0.120.2
+
+### Fixes
+
+- Unable to open PR webview within VSCode. https://github.com/microsoft/vscode-pull-request-github/issues/8028
+
+## 0.120.1
+
+### Fixes
+
+- Extension cannot find git repo when VS Code didn't open the git root directory. https://github.com/microsoft/vscode-pull-request-github/issues/7964
+
+## 0.120.0
+
+### Changes
+
+- The `#openPullRequest` tool recognizes open PR diffs and PR files as being the "open pull request".
+- All Copilot PR notifications can be marked as ready using the right-click context menu on the Copilot section header in the Pull Requests view.
+- The setting `githubIssues.issueAvatarDisplay` can be used to control whether the first assignee's avatar or the author's avatar is shown in the Issues view.
+- Instead of always running the pull request queries that back the Pull Requests view when refreshing, we now check to see if there are new PRs in the repo before running the queries. This should reduce API usage when there are no new PRs.
+- The "Copy link" action is back near the PR title in the pull request description webview.
+- You can configure that the default branch is pulled when you're "done" with a PR using `"githubPullRequests.postDone": "checkoutDefaultBranchAndPull"`.
+
+### Fixes
+
+- Unable to get list of users to assign them to a pull request. https://github.com/microsoft/vscode-pull-request-github/issues/7908
+- Error notifications when using GitHub Enterprise Server. https://github.com/microsoft/vscode-pull-request-github/issues/7901
+- Ignore worktrees that aren't in one of the workspace folders. https://github.com/microsoft/vscode-pull-request-github/issues/7896
+- Typing "#" and then Enter or Tab opens the GitHub issue queries settings. https://github.com/microsoft/vscode-pull-request-github/issues/7838
+- Unexpected branch switching when githubIssues.useBranchForIssues = off. https://github.com/microsoft/vscode-pull-request-github/issues/7827
+- Extension enters rapid refresh loop, causing high API usage and rate limiting. https://github.com/microsoft/vscode-pull-request-github/issues/7816
+- GitHub PR view highlights all repos with Copilot notification. https://github.com/microsoft/vscode-pull-request-github/issues/7852
+- Wrong commit is checked out when local branch exists with the same name. https://github.com/microsoft/vscode-pull-request-github/issues/7702
+- Visual Label not provided for "Title" and "Description" field. https://github.com/microsoft/vscode-pull-request-github/issues/7595
+- VSCode unresponsive during GitHub Pull Requests PR checkout (large number of files changed). https://github.com/microsoft/vscode-pull-request-github/issues/6952
+- extension explodes and kicks back out to GITHUB: LOGIN when non github repos are in working directory (specifically codeberg). https://github.com/microsoft/vscode-pull-request-github/issues/6945
+
+## 0.118.2
+
+### Fixes
+
+- Long coding agent problem statement results in unrecoverable error (Truncate coding agent problem_statement). https://github.com/microsoft/vscode-pull-request-github/issues/7861
+
 ## 0.118.1
 
 ### Fixes

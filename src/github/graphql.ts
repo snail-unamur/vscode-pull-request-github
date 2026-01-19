@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DiffSide, SubjectType, ViewedState } from '../common/comment';
 import { ForkDetails } from './githubRepository';
+import { DiffSide, SubjectType, ViewedState } from '../common/comment';
 
 interface PageInfo {
 	hasNextPage: boolean;
@@ -68,6 +68,15 @@ export interface ReopenedEvent {
 	createdAt: string;
 }
 
+export interface BaseRefChangedEvent {
+	__typename: string;
+	id: string;
+	actor: Actor;
+	createdAt: string;
+	currentRefName: string;
+	previousRefName: string;
+}
+
 export interface AbbreviatedIssueComment {
 	author: Account;
 	body: string;
@@ -122,12 +131,17 @@ export interface Account extends Actor {
 
 export function isAccount(x: Actor | Team | Node | undefined | null): x is Account {
 	const asAccount = x as Partial<Account>;
-	return !!asAccount && !!asAccount?.name && (asAccount?.email !== undefined);
+	return !!asAccount && (asAccount?.name !== undefined) && (asAccount?.email !== undefined);
 }
 
 export function isTeam(x: Actor | Team | Node | undefined | null): x is Team {
 	const asTeam = x as Partial<Team>;
-	return !!asTeam && !!asTeam?.slug;
+	return !!asTeam && (asTeam?.slug !== undefined);
+}
+
+export function isBot(x: Actor | Team | Node | undefined | null): x is Actor {
+	const asBot = x as Partial<Actor>;
+	return !!asBot && !!asBot.id?.startsWith('BOT_');
 }
 
 export interface Team {
@@ -188,6 +202,9 @@ export interface Commit {
 		oid: string;
 		message: string;
 		committedDate: Date;
+		statusCheckRollup?: {
+			state: 'EXPECTED' | 'ERROR' | 'FAILURE' | 'PENDING' | 'SUCCESS';
+		};
 	};
 
 	url: string;
@@ -262,7 +279,7 @@ export interface TimelineEventsResponse {
 	repository: {
 		pullRequest: {
 			timelineItems: {
-				nodes: (MergedEvent | Review | IssueComment | Commit | AssignedEvent | HeadRefDeletedEvent)[];
+				nodes: (MergedEvent | Review | IssueComment | Commit | AssignedEvent | HeadRefDeletedEvent | BaseRefChangedEvent | null)[];
 			};
 		};
 	} | null;
@@ -314,10 +331,12 @@ export interface LatestUpdatesResponse {
 export interface LatestReviewCommitResponse {
 	repository: {
 		pullRequest: {
-			viewerLatestReview: {
-				commit: {
-					oid: string;
-				}
+			reviews: {
+				nodes: {
+					commit: {
+						oid: string;
+					}
+				}[];
 			};
 		};
 	} | null;
@@ -340,6 +359,14 @@ export interface GetReviewRequestsResponse {
 					requestedReviewer: Actor | Account | Team | Node | null;
 				}[];
 			};
+		};
+	} | null;
+}
+
+export interface AddReviewRequestResponse {
+	requestReviews: {
+		pullRequest: {
+			id: string;
 		};
 	} | null;
 }
@@ -484,6 +511,16 @@ export interface MarkPullRequestReadyForReviewResponse {
 			mergeStateStatus: 'BEHIND' | 'BLOCKED' | 'CLEAN' | 'DIRTY' | 'HAS_HOOKS' | 'UNKNOWN' | 'UNSTABLE';
 			viewerCanEnableAutoMerge: boolean;
 			viewerCanDisableAutoMerge: boolean;
+		};
+	};
+}
+
+export interface ConvertPullRequestToDraftResponse {
+	convertPullRequestToDraft: {
+		pullRequest: {
+			isDraft: boolean;
+			mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+			mergeStateStatus: 'BEHIND' | 'BLOCKED' | 'CLEAN' | 'DIRTY' | 'HAS_HOOKS' | 'UNKNOWN' | 'UNSTABLE';
 		};
 	};
 }
@@ -841,6 +878,23 @@ export interface PullRequestsResponse {
 	} | null;
 }
 
+export interface PullRequestNumbersResponse {
+	repository: {
+		pullRequests: {
+			nodes: PullRequestNumberData[]
+		}
+	} | null;
+	rateLimit: RateLimit;
+}
+
+export interface PullRequestNumberData {
+	number: number;
+	title: string;
+	author: {
+		login: string;
+	};
+}
+
 export interface MaxIssueResponse {
 	repository: {
 		issues: {
@@ -1048,7 +1102,7 @@ export interface MergePullRequestResponse {
 	mergePullRequest: {
 		pullRequest: PullRequest & {
 			timelineItems: {
-				nodes: (MergedEvent | Review | IssueComment | Commit | AssignedEvent | HeadRefDeletedEvent)[]
+				nodes: (MergedEvent | Review | IssueComment | Commit | AssignedEvent | HeadRefDeletedEvent | BaseRefChangedEvent)[]
 			}
 		};
 	}

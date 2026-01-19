@@ -7,35 +7,37 @@
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { Repository } from './api/api';
-import { GitErrorCodes, Status } from './api/api1';
+import { GitErrorCodes } from './api/api1';
 import { CommentReply, findActiveHandler, resolveCommentHandler } from './commentHandlerResolver';
 import { commands } from './common/executeCommands';
 import Logger from './common/logger';
-import * as PersistentState from './common/persistentState';
-import { FILE_LIST_LAYOUT, PR_SETTINGS_NAMESPACE } from './common/settingKeys';
+import { FILE_LIST_LAYOUT, HIDE_VIEWED_FILES, PR_SETTINGS_NAMESPACE } from './common/settingKeys';
 import { editQuery } from './common/settingsUtils';
 import { ITelemetry } from './common/telemetry';
+import { SessionLinkInfo } from './common/timelineEvent';
 import { asTempStorageURI, fromPRUri, fromReviewUri, Schemes, toPRUri } from './common/uri';
 import { formatError } from './common/utils';
 import { EXTENSION_ID } from './constants';
-import { ICopilotRemoteAgentCommandArgs } from './github/common';
-import { ChatSessionWithPR } from './github/copilotApi';
-import { CopilotRemoteAgentManager } from './github/copilotRemoteAgent';
+import { CrossChatSessionWithPR } from './github/copilotApi';
+import { CopilotRemoteAgentManager, SessionIdForPr } from './github/copilotRemoteAgent';
 import { FolderRepositoryManager } from './github/folderRepositoryManager';
 import { GitHubRepository } from './github/githubRepository';
 import { Issue } from './github/interface';
 import { IssueModel } from './github/issueModel';
 import { IssueOverviewPanel } from './github/issueOverview';
-import { NotificationProvider } from './github/notifications';
 import { GHPRComment, GHPRCommentThread, TemporaryComment } from './github/prComment';
 import { PullRequestModel } from './github/pullRequestModel';
 import { PullRequestOverviewPanel } from './github/pullRequestOverview';
 import { chooseItem } from './github/quickPicks';
 import { RepositoriesManager } from './github/repositoriesManager';
-import { getIssuesUrl, getPullsUrl, isInCodespaces, ISSUE_OR_URL_EXPRESSION, parseIssueExpressionOutput, vscodeDevPrLink } from './github/utils';
+import { codespacesPrLink, getIssuesUrl, getPullsUrl, isInCodespaces, ISSUE_OR_URL_EXPRESSION, parseIssueExpressionOutput, vscodeDevPrLink } from './github/utils';
 import { OverviewContext } from './github/views';
+import { IssueChatContextItem } from './lm/issueContextProvider';
+import { PRChatContextItem } from './lm/pullRequestContextProvider';
 import { isNotificationTreeItem, NotificationTreeItem } from './notifications/notificationItem';
+import { NotificationsManager } from './notifications/notificationsManager';
 import { PullRequestsTreeDataProvider } from './view/prsTreeDataProvider';
+import { PrsTreeModel } from './view/prsTreeModel';
 import { ReviewCommentController } from './view/reviewCommentController';
 import { ReviewManager } from './view/reviewManager';
 import { ReviewsManager } from './view/reviewsManager';
@@ -50,81 +52,6 @@ import {
 } from './view/treeNodes/fileChangeNode';
 import { PRNode } from './view/treeNodes/pullRequestNode';
 import { RepositoryChangesNode } from './view/treeNodes/repositoryChangesNode';
-
-// Modal dialog options for handling uncommitted changes during PR checkout
-const STASH_CHANGES = vscode.l10n.t('Stash changes');
-const DISCARD_CHANGES = vscode.l10n.t('Discard changes');
-const DONT_SHOW_AGAIN = vscode.l10n.t('Try to checkout anyway and don\'t show again');
-
-// Constants for persistent state storage
-const UNCOMMITTED_CHANGES_SCOPE = vscode.l10n.t('uncommitted changes warning');
-const UNCOMMITTED_CHANGES_STORAGE_KEY = 'showWarning';
-
-/**
- * Shows a modal dialog when there are uncommitted changes during PR checkout
- * @param repository The git repository with uncommitted changes
- * @returns Promise<boolean> true if user chose to proceed (after staging/discarding), false if cancelled
- */
-async function handleUncommittedChanges(repository: Repository): Promise<boolean> {
-	// Check if user has disabled the warning using persistent state
-	if (PersistentState.fetch(UNCOMMITTED_CHANGES_SCOPE, UNCOMMITTED_CHANGES_STORAGE_KEY) === false) {
-		return true; // User has disabled warnings, proceed without showing dialog
-	}
-
-	// Filter out untracked files as they typically don't conflict with PR checkout
-	const trackedWorkingTreeChanges = repository.state.workingTreeChanges.filter(change => change.status !== Status.UNTRACKED);
-	const hasTrackedWorkingTreeChanges = trackedWorkingTreeChanges.length > 0;
-	const hasIndexChanges = repository.state.indexChanges.length > 0;
-
-	if (!hasTrackedWorkingTreeChanges && !hasIndexChanges) {
-		return true; // No tracked uncommitted changes, proceed
-	}
-
-	const modalResult = await vscode.window.showInformationMessage(
-		vscode.l10n.t('You have uncommitted changes that might be overwritten by checking out this pull request.'),
-		{
-			modal: true,
-			detail: vscode.l10n.t('Choose how to handle your uncommitted changes before checking out the pull request.'),
-		},
-		STASH_CHANGES,
-		DISCARD_CHANGES,
-		DONT_SHOW_AGAIN,
-	);
-
-	if (!modalResult) {
-		return false; // User cancelled
-	}
-
-	if (modalResult === DONT_SHOW_AGAIN) {
-		// Store preference to never show this dialog again using persistent state
-		PersistentState.store(UNCOMMITTED_CHANGES_SCOPE, UNCOMMITTED_CHANGES_STORAGE_KEY, false);
-		return true; // Proceed with checkout
-	}
-
-	try {
-		if (modalResult === STASH_CHANGES) {
-			// Stash all changes (working tree changes + any unstaged changes)
-			const allChangedFiles = [
-				...trackedWorkingTreeChanges.map(change => change.uri.fsPath),
-				...repository.state.indexChanges.map(change => change.uri.fsPath),
-			];
-			if (allChangedFiles.length > 0) {
-				await repository.add(allChangedFiles);
-				await vscode.commands.executeCommand('git.stash', repository);
-			}
-		} else if (modalResult === DISCARD_CHANGES) {
-			// Discard all tracked working tree changes
-			const trackedWorkingTreeFiles = trackedWorkingTreeChanges.map(change => change.uri.fsPath);
-			if (trackedWorkingTreeFiles.length > 0) {
-				await repository.clean(trackedWorkingTreeFiles);
-			}
-		}
-		return true; // Successfully handled changes, proceed with checkout
-	} catch (error) {
-		vscode.window.showErrorMessage(vscode.l10n.t('Failed to handle uncommitted changes: {0}', formatError(error)));
-		return false;
-	}
-}
 
 function ensurePR(folderRepoManager: FolderRepositoryManager, pr?: PRNode): PullRequestModel;
 function ensurePR<TIssue extends Issue, TIssueModel extends IssueModel<TIssue>>(folderRepoManager: FolderRepositoryManager, pr?: TIssueModel): TIssueModel;
@@ -149,7 +76,6 @@ export async function openDescription(
 	folderManager: FolderRepositoryManager,
 	revealNode: boolean,
 	preserveFocus: boolean = true,
-	notificationProvider?: NotificationProvider
 ) {
 	const issue = ensurePR(folderManager, issueModel);
 	if (revealNode) {
@@ -165,12 +91,6 @@ export async function openDescription(
 		*/
 		telemetry.sendTelemetryEvent('issue.openDescription');
 	}
-
-	if (notificationProvider?.hasNotification(issue)) {
-		notificationProvider.markPrNotificationsAsRead(issue);
-	}
-
-
 }
 
 export async function openPullRequestOnGitHub(e: PRNode | RepositoryChangesNode | IssueModel | NotificationTreeItem, telemetry: ITelemetry) {
@@ -200,9 +120,9 @@ export async function closeAllPrAndReviewEditors() {
 	}
 }
 
-function isChatSessionWithPR(value: any): value is ChatSessionWithPR {
-	const asChatSessionWithPR = value as Partial<ChatSessionWithPR>;
-	return !!asChatSessionWithPR.pullRequest;
+function isCrossChatSessionWithPR(value: any): value is CrossChatSessionWithPR {
+	const asCrossChatSessionWithPR = value as Partial<CrossChatSessionWithPR>;
+	return !!asCrossChatSessionWithPR.pullRequestDetails;
 }
 
 export function registerCommands(
@@ -210,8 +130,10 @@ export function registerCommands(
 	reposManager: RepositoriesManager,
 	reviewsManager: ReviewsManager,
 	telemetry: ITelemetry,
-	tree: PullRequestsTreeDataProvider,
 	copilotRemoteAgentManager: CopilotRemoteAgentManager,
+	notificationManager: NotificationsManager,
+	prsTreeModel: PrsTreeModel,
+	tree: PullRequestsTreeDataProvider
 ) {
 	const logId = 'RegisterCommands';
 	context.subscriptions.push(
@@ -226,7 +148,7 @@ export function registerCommands(
 					if (activePullRequests.length >= 1) {
 						const result = await chooseItem<PullRequestModel>(
 							activePullRequests,
-							itemValue => itemValue.html_url,
+							itemValue => ({ label: itemValue.html_url }),
 						);
 						if (result) {
 							openPullRequestOnGitHub(result, telemetry);
@@ -263,7 +185,7 @@ export function registerCommands(
 					? (
 						await chooseItem(
 							activePullRequestsWithFolderManager,
-							itemValue => itemValue.activePr.html_url,
+							itemValue => ({ label: itemValue.activePr.html_url }),
 						)
 					)
 					: activePullRequestsWithFolderManager[0];
@@ -286,82 +208,6 @@ export function registerCommands(
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('review.suggestDiff', async e => {
-			const hasShownMessageKey = 'githubPullRequest.suggestDiffMessage';
-			const hasShownMessage = context.globalState.get(hasShownMessageKey, false);
-			if (!hasShownMessage) {
-				await context.globalState.update(hasShownMessageKey, true);
-				const documentation = vscode.l10n.t('Open documentation');
-				const result = await vscode.window.showInformationMessage(vscode.l10n.t('You can now make suggestions from review comments, just like on GitHub.com. See the documentation for more details.'),
-					{ modal: true }, documentation);
-				if (result === documentation) {
-					return vscode.env.openExternal(vscode.Uri.parse('https://github.com/microsoft/vscode-pull-request-github/blob/main/documentation/suggestAChange.md'));
-				}
-			}
-			try {
-				const folderManager = await chooseItem<FolderRepositoryManager>(
-					reposManager.folderManagers,
-					itemValue => pathLib.basename(itemValue.repository.rootUri.fsPath),
-				);
-				if (!folderManager || !folderManager.activePullRequest) {
-					return;
-				}
-
-				const { indexChanges, workingTreeChanges } = folderManager.repository.state;
-
-				if (!indexChanges.length) {
-					if (workingTreeChanges.length) {
-						const yes = vscode.l10n.t('Yes');
-						const stageAll = await vscode.window.showWarningMessage(
-							vscode.l10n.t('There are no staged changes to suggest.\n\nWould you like to automatically stage all your of changes and suggest them?'),
-							{ modal: true },
-							yes,
-						);
-						if (stageAll === yes) {
-							await vscode.commands.executeCommand('git.stageAll');
-						} else {
-							return;
-						}
-					} else {
-						vscode.window.showInformationMessage(vscode.l10n.t('There are no changes to suggest.'));
-						return;
-					}
-				}
-
-				const diff = await folderManager.repository.diff(true);
-
-				let suggestEditMessage = vscode.l10n.t('Suggested edit:\n');
-				if (e && e.inputBox && e.inputBox.value) {
-					suggestEditMessage = `${e.inputBox.value}\n`;
-					e.inputBox.value = '';
-				}
-
-				const suggestEditText = `${suggestEditMessage}\`\`\`diff\n${diff}\n\`\`\``;
-				await folderManager.activePullRequest.createIssueComment(suggestEditText);
-
-				// Reset HEAD and then apply reverse diff
-				await vscode.commands.executeCommand('git.unstageAll');
-
-				const tempFilePath = pathLib.join(
-					folderManager.repository.rootUri.fsPath,
-					'.git',
-					`${folderManager.activePullRequest.number}.diff`,
-				);
-				const encoder = new TextEncoder();
-				const tempUri = vscode.Uri.file(tempFilePath);
-
-				await vscode.workspace.fs.writeFile(tempUri, encoder.encode(diff));
-				await folderManager.repository.apply(tempFilePath, true);
-				await vscode.workspace.fs.delete(tempUri);
-			} catch (err) {
-				const moreError = `${err}${err.stderr ? `\n${err.stderr}` : ''}`;
-				Logger.error(`Applying patch failed: ${moreError}`, logId);
-				vscode.window.showErrorMessage(vscode.l10n.t('Applying patch failed: {0}', formatError(err)));
-			}
-		}),
-	);
-
-	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.openFileOnGitHub', async (e: GitFileChangeNode | RemoteFileChangeNode) => {
 			if (e instanceof RemoteFileChangeNode) {
 				const choice = await vscode.window.showInformationMessage(
@@ -381,6 +227,40 @@ export function registerCommands(
 	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.copyCommitHash', (e: CommitNode) => {
 			vscode.env.clipboard.writeText(e.sha);
+		}),
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('pr.revealFileInOS', (e: GitFileChangeNode | InMemFileChangeNode | undefined) => {
+			let fileChangeNode: FileChangeNode | undefined = e;
+			// When invoked from a keybinding, get the selected item from the tree view
+			if (!fileChangeNode) {
+				// First check the prStatus:github tree (checked out PRs)
+				for (const reviewManager of reviewsManager.reviewManagers) {
+					const selection = reviewManager.changesInPrDataProvider.view.selection;
+					const selectedFileChange = selection.find((node): node is GitFileChangeNode => node instanceof GitFileChangeNode);
+					if (selectedFileChange) {
+						fileChangeNode = selectedFileChange;
+						break;
+					}
+				}
+				// Then check the pr:github tree (non-checked out PRs)
+				if (!fileChangeNode) {
+					const prTreeSelection = tree.view.selection;
+					const selectedInMemFileChange = prTreeSelection.find((node): node is InMemFileChangeNode => node instanceof InMemFileChangeNode);
+					if (selectedInMemFileChange) {
+						fileChangeNode = selectedInMemFileChange;
+					}
+				}
+			}
+			if (!fileChangeNode) {
+				return;
+			}
+			const folderManager = reposManager.getManagerForIssueModel(fileChangeNode.pullRequest);
+			if (folderManager) {
+				const filePath = vscode.Uri.joinPath(folderManager.repository.rootUri, fileChangeNode.changeModel.fileName);
+				vscode.commands.executeCommand('revealFileInOS', filePath);
+			}
 		}),
 	);
 
@@ -503,8 +383,6 @@ export function registerCommands(
 				"pr.deleteLocalPullRequest.success" : {}
 			*/
 				telemetry.sendTelemetryEvent('pr.deleteLocalPullRequest.success');
-				// fire and forget
-				vscode.commands.executeCommand('pr.refreshList');
 			}
 		}),
 	);
@@ -520,7 +398,7 @@ export function registerCommands(
 		}
 		return chooseItem<ReviewManager>(
 			reviewsManager.reviewManagers,
-			itemValue => pathLib.basename(itemValue.repository.rootUri.fsPath),
+			itemValue => ({ label: pathLib.basename(itemValue.repository.rootUri.fsPath) }),
 			{ placeHolder: vscode.l10n.t('Choose a repository to create a pull request in'), ignoreFocusOut: true },
 		);
 	}
@@ -572,37 +450,6 @@ export function registerCommands(
 		),
 	);
 
-	const switchToPr = async (folderManager: FolderRepositoryManager, pullRequestModel: PullRequestModel, repository: Repository | undefined, isFromDescription: boolean) => {
-		// If we don't have a repository from the node, use the one from the folder manager
-		const repositoryToCheck = repository || folderManager.repository;
-
-		// Check for uncommitted changes before proceeding with checkout
-		const shouldProceed = await handleUncommittedChanges(repositoryToCheck);
-		if (!shouldProceed) {
-			return; // User cancelled or there was an error handling changes
-		}
-
-		/* __GDPR__
-			"pr.checkout" : {
-				"fromDescriptionPage" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-			}
-		*/
-		telemetry.sendTelemetryEvent('pr.checkout', { fromDescription: isFromDescription.toString() });
-
-		return vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.SourceControl,
-				title: vscode.l10n.t('Switching to Pull Request #{0}', pullRequestModel.number),
-			},
-			async () => {
-				await ReviewManager.getReviewManagerForRepository(
-					reviewsManager.reviewManagers,
-					pullRequestModel.githubRepository,
-					repository
-				)?.switch(pullRequestModel);
-			});
-	};
-
 	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.pick', async (pr: PRNode | RepositoryChangesNode | PullRequestModel) => {
 			if (pr === undefined) {
@@ -628,7 +475,7 @@ export function registerCommands(
 			}
 
 			const fromDescriptionPage = pr instanceof PullRequestModel;
-			return switchToPr(folderManager, pullRequestModel, repository, fromDescriptionPage);
+			return reviewsManager.switchToPr(folderManager, pullRequestModel, repository, fromDescriptionPage);
 
 		}));
 
@@ -650,7 +497,7 @@ export function registerCommands(
 		return { folderManager, pr };
 	};
 
-	const applyPullRequestChanges = async (folderManager: FolderRepositoryManager, pullRequest: PullRequestModel): Promise<void> => {
+	const applyPullRequestChanges = async (task: vscode.Progress<{ message?: string; increment?: number; }>, folderManager: FolderRepositoryManager, pullRequest: PullRequestModel): Promise<void> => {
 		let patch: string | undefined;
 		try {
 			patch = await pullRequest.getPatch();
@@ -668,22 +515,13 @@ export function registerCommands(
 			const encoder = new TextEncoder();
 			const tempUri = vscode.Uri.file(tempFilePath);
 
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t('Applying changes from pull request #{0}', pullRequest.number.toString()),
-					cancellable: false
-				},
-				async (task) => {
-					await vscode.workspace.fs.writeFile(tempUri, encoder.encode(patch));
-					try {
-						await folderManager.repository.apply(tempFilePath, false);
-						task.report({ message: vscode.l10n.t('Successfully applied changes from pull request #{0}', pullRequest.number.toString()), increment: 100 });
-					} finally {
-						await vscode.workspace.fs.delete(tempUri);
-					}
-				}
-			);
+			await vscode.workspace.fs.writeFile(tempUri, encoder.encode(patch));
+			try {
+				await folderManager.repository.apply(tempFilePath, false);
+				task.report({ message: vscode.l10n.t('Successfully applied changes from pull request #{0}', pullRequest.number.toString()), increment: 100 });
+			} finally {
+				await vscode.workspace.fs.delete(tempUri);
+			}
 
 		} catch (error) {
 			const errorMessage = formatError(error);
@@ -712,6 +550,18 @@ export function registerCommands(
 		return !!contextAsPath.path;
 	}
 
+	function prNumberFromUriPath(path: string): number | undefined {
+		const trimPath = path.startsWith('/') ? path.substring(1) : path;
+		if (!Number.isNaN(Number(trimPath))) {
+			return Number(trimPath);
+		}
+		// This is a base64 encoded PR number like: /MTIz
+		const decoded = Number(Buffer.from(trimPath, 'base64').toString('utf8'));
+		if (!Number.isNaN(decoded)) {
+			return decoded;
+		}
+	}
+
 	context.subscriptions.push(vscode.commands.registerCommand('pr.checkoutFromDescription', async (ctx: OverviewContext | { path: string } | undefined) => {
 		if (!ctx) {
 			return vscode.window.showErrorMessage(vscode.l10n.t('No pull request context provided for checkout.'));
@@ -719,9 +569,9 @@ export function registerCommands(
 
 		if (contextHasPath(ctx)) {
 			const { path } = ctx;
-			const prNumber = Number(Buffer.from(path.substring(1), 'base64').toString('utf8'));
-			if (Number.isNaN(prNumber)) {
-				return vscode.window.showErrorMessage(vscode.l10n.t('Unable to parse pull request number.'));
+			const prNumber = prNumberFromUriPath(path);
+			if (!prNumber) {
+				return vscode.window.showErrorMessage(vscode.l10n.t('No pull request number found in context path.'));
 			}
 			const folderManager = reposManager.folderManagers[0];
 			const pullRequest = await folderManager.fetchById(folderManager.gitHubRepositories[0], Number(prNumber));
@@ -729,14 +579,14 @@ export function registerCommands(
 				return vscode.window.showErrorMessage(vscode.l10n.t('Unable to find pull request #{0}', prNumber.toString()));
 			}
 
-			return switchToPr(folderManager, pullRequest, folderManager.repository, true);
+			return reviewsManager.switchToPr(folderManager, pullRequest, folderManager.repository, true);
 		}
 
 		const resolved = await resolvePr(ctx);
 		if (!resolved) {
 			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to resolve pull request for checkout.'));
 		}
-		return switchToPr(resolved.folderManager, resolved.pr, resolved.folderManager.repository, true);
+		return reviewsManager.switchToPr(resolved.folderManager, resolved.pr, resolved.folderManager.repository, true);
 
 	}));
 
@@ -747,29 +597,52 @@ export function registerCommands(
 
 		if (contextHasPath(ctx)) {
 			const { path } = ctx;
-			const prNumber = Number(Buffer.from(path.substring(1), 'base64').toString('utf8'));
-			if (Number.isNaN(prNumber)) {
+			const prNumber = prNumberFromUriPath(path);
+			if (!prNumber) {
 				return vscode.window.showErrorMessage(vscode.l10n.t('Unable to parse pull request number.'));
 			}
-			const folderManager = reposManager.folderManagers[0];
-			const pullRequest = await folderManager.fetchById(folderManager.gitHubRepositories[0], Number(prNumber));
-			if (!pullRequest) {
-				return vscode.window.showErrorMessage(vscode.l10n.t('Unable to find pull request #{0}', prNumber.toString()));
+
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t('Applying changes from pull request #{0}', prNumber.toString()),
+					cancellable: false
+				},
+				async (task) => {
+					task.report({ increment: 30 });
+
+					const folderManager = reposManager.folderManagers[0];
+					const pullRequest = await folderManager.fetchById(folderManager.gitHubRepositories[0], Number(prNumber));
+					if (!pullRequest) {
+						return vscode.window.showErrorMessage(vscode.l10n.t('Unable to find pull request #{0}', prNumber.toString()));
+					}
+
+					return applyPullRequestChanges(task, folderManager, pullRequest);
+				});
+
+			return;
+		}
+
+		await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: vscode.l10n.t('Applying changes from pull request'),
+				cancellable: false
+			},
+			async (task) => {
+				task.report({ increment: 30 });
+
+				const resolved = await resolvePr(ctx);
+				if (!resolved) {
+					return vscode.window.showErrorMessage(vscode.l10n.t('Unable to resolve pull request for applying changes.'));
+				}
+				return applyPullRequestChanges(task, resolved.folderManager, resolved.pr);
 			}
-
-			return applyPullRequestChanges(folderManager, pullRequest);
-		}
-
-		const resolved = await resolvePr(ctx);
-		if (!resolved) {
-			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to resolve pull request for applying changes.'));
-		}
-		return applyPullRequestChanges(resolved.folderManager, resolved.pr);
-
+		);
 	}));
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.openChanges', async (pr: PRNode | RepositoryChangesNode | PullRequestModel | OverviewContext | ChatSessionWithPR | undefined) => {
+		vscode.commands.registerCommand('pr.openChanges', async (pr: PRNode | RepositoryChangesNode | PullRequestModel | OverviewContext | CrossChatSessionWithPR | { path: string } | undefined) => {
 			if (pr === undefined) {
 				// This is unexpected, but has happened a few times.
 				Logger.error('Unexpectedly received undefined when picking a PR.', logId);
@@ -782,9 +655,29 @@ export function registerCommands(
 				pullRequestModel = pr.pullRequestModel;
 			} else if (pr instanceof PullRequestModel) {
 				pullRequestModel = pr;
-			} else if (isChatSessionWithPR(pr)) {
-				pullRequestModel = pr.pullRequest;
-			} else {
+			} else if (isCrossChatSessionWithPR(pr)) {
+				const resolved = await resolvePr({
+					owner: pr.pullRequestDetails.repository.owner.login,
+					repo: pr.pullRequestDetails.repository.name,
+					number: pr.pullRequestDetails.number,
+					preventDefaultContextMenuItems: true,
+				});
+				pullRequestModel = resolved?.pr;
+			}
+			else if (contextHasPath(pr)) {
+				const { path } = pr;
+				const prNumber = prNumberFromUriPath(path);
+				if (!prNumber) {
+					return vscode.window.showErrorMessage(vscode.l10n.t('No pull request number found in context path.'));
+				}
+				const folderManager = reposManager.folderManagers[0];
+				const pullRequest = await folderManager.fetchById(folderManager.gitHubRepositories[0], Number(prNumber));
+				if (!pullRequest) {
+					return vscode.window.showErrorMessage(vscode.l10n.t('Unable to find pull request #{0}', prNumber.toString()));
+				}
+				pullRequestModel = pullRequest;
+			}
+			else {
 				const resolved = await resolvePr(pr as OverviewContext);
 				pullRequestModel = resolved?.pr;
 			}
@@ -831,24 +724,38 @@ export function registerCommands(
 		}
 	}));
 
+	const pickPullRequest = async (pr: PRNode | RepositoryChangesNode | PullRequestModel, linkGenerator: (pr: PullRequestModel) => string, requiresHead: boolean = false) => {
+		if (pr === undefined) {
+			// This is unexpected, but has happened a few times.
+			Logger.error('Unexpectedly received undefined when picking a PR.', logId);
+			return vscode.window.showErrorMessage(vscode.l10n.t('No pull request was selected to checkout, please try again.'));
+		}
+
+		let pullRequestModel: PullRequestModel;
+
+		if (pr instanceof PRNode || pr instanceof RepositoryChangesNode) {
+			pullRequestModel = pr.pullRequestModel;
+		} else {
+			pullRequestModel = pr;
+		}
+
+		if (requiresHead && !pullRequestModel.head) {
+			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to checkout pull request: missing head branch information.'));
+		}
+
+		return vscode.env.openExternal(vscode.Uri.parse(linkGenerator(pullRequestModel)));
+	};
+
 	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.pickOnVscodeDev', async (pr: PRNode | RepositoryChangesNode | PullRequestModel) => {
-			if (pr === undefined) {
-				// This is unexpected, but has happened a few times.
-				Logger.error('Unexpectedly received undefined when picking a PR.', logId);
-				return vscode.window.showErrorMessage(vscode.l10n.t('No pull request was selected to checkout, please try again.'));
-			}
+		vscode.commands.registerCommand('pr.pickOnVscodeDev', async (pr: PRNode | RepositoryChangesNode | PullRequestModel) =>
+			pickPullRequest(pr, vscodeDevPrLink)
+		),
+	);
 
-			let pullRequestModel: PullRequestModel;
-
-			if (pr instanceof PRNode || pr instanceof RepositoryChangesNode) {
-				pullRequestModel = pr.pullRequestModel;
-			} else {
-				pullRequestModel = pr;
-			}
-
-			return vscode.env.openExternal(vscode.Uri.parse(vscodeDevPrLink(pullRequestModel)));
-		}),
+	context.subscriptions.push(
+		vscode.commands.registerCommand('pr.pickOnCodespaces', async (pr: PRNode | RepositoryChangesNode | PullRequestModel) =>
+			pickPullRequest(pr, codespacesPrLink, true)
+		),
 	);
 
 	context.subscriptions.push(vscode.commands.registerCommand('pr.checkoutOnVscodeDevFromDescription', async (context: OverviewContext | undefined) => {
@@ -862,6 +769,28 @@ export function registerCommands(
 		return vscode.env.openExternal(vscode.Uri.parse(vscodeDevPrLink(resolved.pr)));
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('pr.checkoutOnCodespacesFromDescription', async (context: OverviewContext | undefined) => {
+		if (!context) {
+			return vscode.window.showErrorMessage(vscode.l10n.t('No pull request context provided for checkout.'));
+		}
+		const resolved = await resolvePr(context);
+		if (!resolved) {
+			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to resolve pull request for checkout.'));
+		}
+		if (!resolved.pr.head) {
+			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to checkout pull request: missing head branch information.'));
+		}
+		return vscode.env.openExternal(vscode.Uri.parse(codespacesPrLink(resolved.pr)));
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('pr.openSessionLogFromDescription', async (context: SessionLinkInfo | undefined) => {
+		if (!context) {
+			return vscode.window.showErrorMessage(vscode.l10n.t('No pull request context provided for checkout.'));
+		}
+		const resource = SessionIdForPr.getResource(context.pullNumber, context.sessionIndex);
+		return vscode.commands.executeCommand('vscode.open', resource);
+	}));
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.exit', async (pr: PRNode | RepositoryChangesNode | PullRequestModel | undefined) => {
 			let pullRequestModel: PullRequestModel | undefined;
@@ -872,7 +801,7 @@ export function registerCommands(
 				pullRequestModel = await chooseItem<PullRequestModel>(reposManager.folderManagers
 					.map(folderManager => folderManager.activePullRequest!)
 					.filter(activePR => !!activePR),
-					itemValue => `${itemValue.number}: ${itemValue.title}`,
+					itemValue => ({ label: `${itemValue.number}: ${itemValue.title}` }),
 					{ placeHolder: vscode.l10n.t('Choose the pull request to exit') });
 			} else {
 				pullRequestModel = pr;
@@ -900,7 +829,7 @@ export function registerCommands(
 					const manager = reposManager.getManagerForIssueModel(pullRequestModel);
 					if (manager) {
 						const prBranch = manager.repository.state.HEAD?.name;
-						await manager.checkoutDefaultBranch(branch);
+						await manager.checkoutDefaultBranch(branch, pullRequestModel);
 						if (prBranch) {
 							await manager.cleanupAfterPullRequest(prBranch, pullRequestModel!);
 						}
@@ -940,7 +869,7 @@ export function registerCommands(
 					let newPR;
 					if (value === yes) {
 						try {
-							newPR = await folderManager.mergePullRequest(pullRequest);
+							newPR = await pullRequest.merge(folderManager.repository);
 							return newPR;
 						} catch (e) {
 							vscode.window.showErrorMessage(`Unable to merge pull request. ${formatError(e)}`);
@@ -952,48 +881,23 @@ export function registerCommands(
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.readyForReview', async (pr?: PRNode) => {
-			const folderManager = reposManager.getManagerForIssueModel(pr?.pullRequestModel);
-			if (!folderManager) {
-				return;
+		vscode.commands.registerCommand('pr.dismissNotification', node => {
+			if (node instanceof PRNode) {
+				notificationManager.markPrNotificationsAsRead(node.pullRequestModel);
+				prsTreeModel.clearCopilotNotification(node.pullRequestModel.remote.owner, node.pullRequestModel.remote.repositoryName, node.pullRequestModel.number);
 			}
-			const pullRequest = ensurePR(folderManager, pr);
-			const yes = vscode.l10n.t('Yes');
-			return vscode.window
-				.showWarningMessage(
-					vscode.l10n.t('Are you sure you want to mark this pull request as ready to review on GitHub?'),
-					{ modal: true },
-					yes,
-				)
-				.then(async value => {
-					let isDraft;
-					if (value === yes) {
-						try {
-							isDraft = (await pullRequest.setReadyForReview()).isDraft;
-							return isDraft;
-						} catch (e) {
-							vscode.window.showErrorMessage(
-								`Unable to mark pull request as ready to review. ${formatError(e)}`,
-							);
-							return isDraft;
-						}
-					}
-				});
 		}),
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.dismissNotification', node => {
-			if (node instanceof PRNode) {
-				tree.notificationProvider.markPrNotificationsAsRead(node.pullRequestModel).then(
-					() => tree.refresh(node)
-				);
-
+		vscode.commands.registerCommand('pr.markAllCopilotNotificationsAsRead', node => {
+			if (node instanceof CategoryTreeNode && node.isCopilot && node.repo) {
+				prsTreeModel.clearAllCopilotNotifications(node.repo.owner, node.repo.repositoryName);
 			}
 		}),
 	);
 
-	async function openDescriptionCommand(argument: RepositoryChangesNode | PRNode | IssueModel | ChatSessionWithPR | undefined) {
+	async function openDescriptionCommand(argument: RepositoryChangesNode | PRNode | IssueModel | CrossChatSessionWithPR | PRChatContextItem | IssueChatContextItem | undefined) {
 		let issueModel: IssueModel | undefined;
 		if (!argument) {
 			const activePullRequests: PullRequestModel[] = reposManager.folderManagers
@@ -1002,7 +906,7 @@ export function registerCommands(
 			if (activePullRequests.length >= 1) {
 				issueModel = await chooseItem<PullRequestModel>(
 					activePullRequests,
-					itemValue => itemValue.title,
+					itemValue => ({ label: itemValue.title }),
 				);
 			}
 		} else {
@@ -1010,8 +914,17 @@ export function registerCommands(
 				issueModel = argument.pullRequestModel;
 			} else if (argument instanceof PRNode) {
 				issueModel = argument.pullRequestModel;
-			} else if (isChatSessionWithPR(argument)) {
-				issueModel = argument.pullRequest;
+			} else if (isCrossChatSessionWithPR(argument)) {
+				issueModel = (await resolvePr({
+					owner: argument.pullRequestDetails.repository.owner.login,
+					repo: argument.pullRequestDetails.repository.name,
+					number: argument.pullRequestDetails.number,
+					preventDefaultContextMenuItems: true,
+				}))?.pr;
+			} else if (PRChatContextItem.is(argument)) {
+				issueModel = argument.pr;
+			} else if (IssueChatContextItem.is(argument)) {
+				issueModel = argument.issue;
 			} else {
 				issueModel = argument;
 			}
@@ -1038,11 +951,17 @@ export function registerCommands(
 
 		const revealDescription = !(argument instanceof PRNode);
 
-		await openDescription(telemetry, issueModel, descriptionNode, folderManager, revealDescription, !(argument instanceof RepositoryChangesNode), tree.notificationProvider);
+		await openDescription(telemetry, issueModel, descriptionNode, folderManager, revealDescription, !(argument instanceof RepositoryChangesNode));
 	}
 
-	async function checkoutChatSessionPullRequest(argument: ChatSessionWithPR) {
-		const pr = argument.pullRequest;
+	async function checkoutChatSessionPullRequest(argument: CrossChatSessionWithPR) {
+		const pr = await resolvePr({
+			owner: argument.pullRequestDetails.repository.owner.login,
+			repo: argument.pullRequestDetails.repository.name,
+			number: argument.pullRequestDetails.number,
+			preventDefaultContextMenuItems: true,
+		}).then(resolved => resolved?.pr);
+
 		if (!pr) {
 			Logger.warn(`No pull request found in chat session`, logId);
 			return;
@@ -1054,48 +973,13 @@ export function registerCommands(
 			return vscode.window.showErrorMessage(vscode.l10n.t('Unable to find repository for pull request #{0}', pr.number.toString()));
 		}
 
-		return switchToPr(folderManager, pr, folderManager.repository, false);
-	}
-
-	async function closeChatSessionPullRequest(argument: ChatSessionWithPR) {
-		const pr = argument.pullRequest;
-		if (!pr) {
-			Logger.warn(`No pull request found in chat session`, logId);
-			return;
-		}
-		pr.close();
-		copilotRemoteAgentManager.refreshChatSessions();
-	}
-
-	async function cancelCodingAgent(argument: ChatSessionWithPR) {
-		const pr = argument.pullRequest;
-		if (!pr) {
-			Logger.warn(`No pull request found in chat session`, logId);
-			return;
-		}
-
-		copilotRemoteAgentManager.cancelMostRecentChatSession(pr);
-		// TODO: show a progress icon until the cancelation is finished
+		return reviewsManager.switchToPr(folderManager, pr, folderManager.repository, false);
 	}
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(
 			'pr.checkoutChatSessionPullRequest',
 			checkoutChatSessionPullRequest
-		)
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'pr.closeChatSessionPullRequest',
-			closeChatSessionPullRequest
-		)
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'pr.cancelCodingAgent',
-			cancelCodingAgent
 		)
 	);
 
@@ -1553,6 +1437,14 @@ ${contents}
 	);
 
 	context.subscriptions.push(
+		vscode.commands.registerCommand('pr.toggleHideViewedFiles', _ => {
+			const config = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE);
+			const currentValue = config.get<boolean>(HIDE_VIEWED_FILES, false);
+			config.update(HIDE_VIEWED_FILES, !currentValue, vscode.ConfigurationTarget.Global);
+		}),
+	);
+
+	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.refreshPullRequest', (prNode: PRNode) => {
 			const folderManager = reposManager.getManagerForIssueModel(prNode.pullRequestModel);
 			if (folderManager && prNode.pullRequestModel.equals(folderManager?.activePullRequest)) {
@@ -1672,7 +1564,7 @@ ${contents}
 					.filter(activePR => !!activePR);
 				pr = await chooseItem<PullRequestModel>(
 					activePullRequests,
-					itemValue => `${itemValue.number}: ${itemValue.title}`,
+					itemValue => ({ label: `${itemValue.number}: ${itemValue.title}` }),
 					{ placeHolder: vscode.l10n.t('Pull request to create a link for') },
 				);
 			}
@@ -1728,32 +1620,100 @@ ${contents}
 			}
 			const githubRepo = await chooseItem<{ manager: FolderRepositoryManager, repo: GitHubRepository }>(
 				githubRepositories,
-				itemValue => `${itemValue.repo.remote.owner}/${itemValue.repo.remote.repositoryName}`,
+				itemValue => ({ label: `${itemValue.repo.remote.owner}/${itemValue.repo.remote.repositoryName}` }),
 				{ placeHolder: vscode.l10n.t('Which GitHub repository do you want to checkout the pull request from?') }
 			);
 			if (!githubRepo) {
 				return;
 			}
-			const prNumber = await vscode.window.showInputBox({
-				ignoreFocusOut: true, prompt: vscode.l10n.t('Enter the pull request number or URL'),
-				validateInput: (input: string) => {
-					const result = validateAndParseInput(input, githubRepo.repo.remote.owner, githubRepo.repo.remote.repositoryName);
-					return result.isValid ? undefined : result.errorMessage;
+
+			// Create QuickPick to show all PRs
+			const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & { pr?: PullRequestModel }>();
+			quickPick.placeholder = vscode.l10n.t('Enter a pull request number/URL or select from the list');
+			quickPick.matchOnDescription = true;
+			quickPick.matchOnDetail = true;
+			quickPick.show();
+			quickPick.busy = true;
+
+			let acceptDisposable: vscode.Disposable | undefined;
+			let hideDisposable: vscode.Disposable | undefined;
+
+			// Fetch all open PRs (lightweight query)
+			try {
+				const prs = await githubRepo.repo.getPullRequestNumbers();
+				if (!prs) {
+					return vscode.window.showErrorMessage(vscode.l10n.t('Failed to fetch pull requests'));
 				}
-			});
-			if ((prNumber === undefined) || prNumber === '#') {
-				return;
-			}
+				// Sort PRs by number in descending order (most recent first)
+				const sortedPRs = prs.sort((a, b) => b.number - a.number);
+				const prItems: (vscode.QuickPickItem & { prNumber: number })[] = sortedPRs.map(pr => ({
+					label: `#${pr.number} ${pr.title}`,
+					description: `by @${pr.author.login}`,
+					prNumber: pr.number
+				}));
 
-			// Extract PR number from input (either direct number or URL)
-			const parseResult = validateAndParseInput(prNumber, githubRepo.repo.remote.owner, githubRepo.repo.remote.repositoryName);
-			if (!parseResult.isValid) {
-				return vscode.window.showErrorMessage(parseResult.errorMessage || vscode.l10n.t('Invalid pull request number or URL'));
-			}
+				quickPick.items = prItems;
+				quickPick.busy = false;
 
-			const prModel = await githubRepo.manager.fetchById(githubRepo.repo, parseResult.prNumber);
-			if (prModel) {
-				return ReviewManager.getReviewManagerForFolderManager(reviewsManager.reviewManagers, githubRepo.manager)?.switch(prModel);
+				// Handle selection
+
+				const selected = await new Promise<{ selectedItem: (vscode.QuickPickItem & { prNumber?: number }) | undefined, selectedString: string | undefined }>((resolve) => {
+					acceptDisposable = quickPick.onDidAccept(() => {
+						let selectedString: string | undefined;
+						let selectedItem: (vscode.QuickPickItem & { prNumber?: number }) | undefined;
+
+						if (quickPick.value) {
+							selectedString = quickPick.value;
+						}
+
+						if (quickPick.selectedItems.length > 0) {
+							selectedItem = quickPick.selectedItems[0];
+						}
+
+						resolve({ selectedItem, selectedString });
+					});
+					hideDisposable = quickPick.onDidHide(() => resolve({ selectedItem: undefined, selectedString: undefined }));
+				});
+
+				if (!selected.selectedItem && !selected.selectedString) {
+					return;
+				}
+				quickPick.busy = true;
+				let prModel: PullRequestModel | undefined;
+
+				// Check if user selected from the list or typed a custom value
+				if (selected.selectedString) {
+					// User typed a PR number or URL
+					const parseResult = validateAndParseInput(selected.selectedString, githubRepo.repo.remote.owner, githubRepo.repo.remote.repositoryName);
+					if (!parseResult.isValid) {
+						return vscode.window.showErrorMessage(parseResult.errorMessage || vscode.l10n.t('Invalid pull request number or URL'));
+					}
+					// The user may have just entered part of a number and meant to select it from the list
+					const selectedItemNumber = selected.selectedItem?.prNumber;
+					if (selectedItemNumber !== undefined) {
+						const parsedDigits = parseResult.prNumber.toString();
+						const selectedDigits = selectedItemNumber.toString();
+						if (selectedDigits.length > parsedDigits.length && selectedDigits.startsWith(parsedDigits)) {
+							parseResult.prNumber = selectedItemNumber;
+						}
+					}
+					prModel = await githubRepo.manager.fetchById(githubRepo.repo, parseResult.prNumber);
+				} else if (selected.selectedItem?.prNumber) {
+					// User selected from the list
+					prModel = await githubRepo.manager.fetchById(githubRepo.repo, selected.selectedItem.prNumber);
+				}
+
+				if (prModel) {
+					return ReviewManager.getReviewManagerForFolderManager(reviewsManager.reviewManagers, githubRepo.manager)?.switch(prModel);
+				}
+			} catch (e) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Failed to fetch pull requests: {0}', formatError(e)));
+			} finally {
+				// Clean up event listeners and QuickPick
+				acceptDisposable?.dispose();
+				hideDisposable?.dispose();
+				quickPick.hide();
+				quickPick.dispose();
 			}
 		}));
 
@@ -1764,7 +1724,7 @@ ${contents}
 		});
 		return chooseItem<GitHubRepository>(
 			githubRepositories,
-			itemValue => `${itemValue.remote.owner}/${itemValue.remote.repositoryName}`,
+			itemValue => ({ label: `${itemValue.remote.owner}/${itemValue.remote.repositoryName}` }),
 			{ placeHolder: vscode.l10n.t('Which GitHub repository do you want to open?') }
 		);
 	}
@@ -1797,9 +1757,6 @@ ${contents}
 				handler.applySuggestion(comment);
 			}
 		}));
-	context.subscriptions.push(
-		vscode.commands.registerCommand('githubpr.remoteAgent', async (args: ICopilotRemoteAgentCommandArgs) => await copilotRemoteAgentManager.commandImpl(args))
-	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.applySuggestionWithCopilot', async (comment: GHPRComment) => {
 			/* __GDPR__
@@ -1988,30 +1945,12 @@ ${contents}
 
 			const pr = await chooseItem<PullRequestModel>(
 				activePullRequests,
-				itemValue => `${itemValue.number}: ${itemValue.title}`,
+				itemValue => ({ label: `${itemValue.number}: ${itemValue.title}` }),
 				{ placeHolder: vscode.l10n.t('Pull request to create a link for') },
 			);
 			if (pr) {
 				return vscode.env.clipboard.writeText(pr.html_url);
 			}
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.refreshChatSessions', async () => {
-			copilotRemoteAgentManager.refreshChatSessions();
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.preferredCodingAgentGitHubRemote', async () => {
-			await copilotRemoteAgentManager.promptAndUpdatePreferredGitHubRemote();
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.resetCodingAgentPreferences', async () => {
-			await copilotRemoteAgentManager.resetCodingAgentPreferences();
 		})
 	);
 }

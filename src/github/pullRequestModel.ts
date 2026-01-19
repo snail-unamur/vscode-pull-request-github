@@ -8,28 +8,18 @@ import * as path from 'path';
 import equals from 'fast-deep-equal';
 import gql from 'graphql-tag';
 import * as vscode from 'vscode';
-import { Repository } from '../api/api';
-import { COPILOT_ACCOUNTS, DiffSide, IComment, IReviewThread, SubjectType, ViewedState } from '../common/comment';
-import { getGitChangeType, getModifiedContentFromDiffHunk, parseDiff } from '../common/diffHunk';
-import { commands } from '../common/executeCommands';
-import { GitChangeType, InMemFileChange, SlimFileChange } from '../common/file';
-import { GitHubRef } from '../common/githubRef';
-import Logger from '../common/logger';
-import { Remote } from '../common/remote';
-import { ITelemetry } from '../common/telemetry';
-import { ClosedEvent, EventType, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
-import { resolvePath, Schemes, toGitHubCommitUri, toPRUri, toReviewUri } from '../common/uri';
-import { formatError, isDescendant } from '../common/utils';
-import { InMemFileChangeModel, RemoteFileChangeModel } from '../view/fileChangeModel';
 import { OctokitCommon } from './common';
 import { ConflictResolutionModel } from './conflictResolutionModel';
 import { CredentialStore } from './credentials';
+import { showEmptyCommitWebview } from './emptyCommitWebview';
 import { FolderRepositoryManager } from './folderRepositoryManager';
-import { GitHubRepository } from './githubRepository';
+import { GitHubRepository, GraphQLError, GraphQLErrorType } from './githubRepository';
 import {
 	AddCommentResponse,
 	AddReactionResponse,
+	AddReviewRequestResponse as AddReviewsResponse,
 	AddReviewThreadResponse,
+	ConvertPullRequestToDraftResponse,
 	DeleteReactionResponse,
 	DeleteReviewResponse,
 	DequeuePullRequestResponse,
@@ -37,8 +27,11 @@ import {
 	EnqueuePullRequestResponse,
 	FileContentResponse,
 	GetReviewRequestsResponse,
+	MergeMethod as GraphQLMergeMethod,
 	LatestReviewCommitResponse,
 	MarkPullRequestReadyForReviewResponse,
+	MergePullRequestInput,
+	MergePullRequestResponse,
 	PendingReviewIdResponse,
 	PullRequestCommentsResponse,
 	PullRequestFilesResponse,
@@ -50,9 +43,11 @@ import {
 	SubmitReviewResponse,
 	TimelineEventsResponse,
 	UnresolveReviewThreadResponse,
+	UpdateIssueResponse,
 } from './graphql';
 import {
 	AccountType,
+	ConvertToDraft,
 	GithubItemStateEnum,
 	IAccount,
 	IGitTreeItem,
@@ -88,6 +83,20 @@ import {
 	RestAccount,
 	restPaginate,
 } from './utils';
+import { Repository } from '../api/api';
+import { COPILOT_ACCOUNTS, DiffSide, IComment, IReviewThread, SubjectType, ViewedState } from '../common/comment';
+import { getGitChangeType, getModifiedContentFromDiffHunk, parseDiff } from '../common/diffHunk';
+import { commands } from '../common/executeCommands';
+import { GitChangeType, InMemFileChange, SlimFileChange } from '../common/file';
+import { GitHubRef } from '../common/githubRef';
+import Logger from '../common/logger';
+import { Remote } from '../common/remote';
+import { DEFAULT_MERGE_METHOD, PR_SETTINGS_NAMESPACE } from '../common/settingKeys';
+import { ITelemetry } from '../common/telemetry';
+import { ClosedEvent, EventType, ReviewEvent, TimelineEvent } from '../common/timelineEvent';
+import { resolvePath, Schemes, toGitHubCommitUri, toPRUri, toReviewUri } from '../common/uri';
+import { formatError, isDescendant } from '../common/utils';
+import { InMemFileChangeModel, RemoteFileChangeModel } from '../view/fileChangeModel';
 
 interface IPullRequestModel {
 	head: GitHubRef | null;
@@ -112,7 +121,9 @@ export interface FileViewedStateChangeEvent {
 
 export type FileViewedState = { [key: string]: ViewedState };
 
-const BATCH_SIZE = 100;
+type TreeDataMode = '100644' | '100755' | '120000';
+
+const BATCH_SIZE = 50;
 
 export class PullRequestModel extends IssueModel<PullRequest> implements IPullRequestModel {
 	static override ID = 'PullRequestModel';
@@ -130,7 +141,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	private _onDidChangePendingReviewState: vscode.EventEmitter<boolean> = this._register(new vscode.EventEmitter<boolean>());
 	public onDidChangePendingReviewState = this._onDidChangePendingReviewState.event;
 
-	private _reviewThreadsCache: IReviewThread[] = [];
+	private _reviewThreadsCache: IReviewThread[] | undefined;
 	private _reviewThreadsCacheInitialized = false;
 	private _onDidChangeReviewThreads = this._register(new vscode.EventEmitter<ReviewThreadChangeEvent>());
 	public onDidChangeReviewThreads = this._onDidChangeReviewThreads.event;
@@ -177,7 +188,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	public clear() {
 		this.comments = [];
 		this._reviewThreadsCacheInitialized = false;
-		this._reviewThreadsCache = [];
+		this._reviewThreadsCache = undefined;
 	}
 
 	public async initializeReviewThreadCache(): Promise<void> {
@@ -186,7 +197,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	}
 
 	public get reviewThreadsCache(): IReviewThread[] {
-		return this._reviewThreadsCache;
+		return this._reviewThreadsCache ?? [];
 	}
 
 	public get reviewThreadsCacheReady(): boolean {
@@ -374,6 +385,100 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		return action;
 	}
 
+	async merge(
+		repository: Repository,
+		title?: string,
+		description?: string,
+		method?: 'merge' | 'squash' | 'rebase',
+		email?: string
+	): Promise<{ merged: boolean, message: string, timeline?: TimelineEvent[] }> {
+		Logger.debug(`Merging PR: ${this.number} method: ${method} for user: "${email}" - enter`, PullRequestModel.ID);
+		const { mutate, schema } = await this.githubRepository.ensure();
+
+		const workingDirectorySHA = repository.state.HEAD?.commit;
+		const mergingPRSHA = this.head?.sha;
+		const workingDirectoryIsDirty = repository.state.workingTreeChanges.length > 0;
+		let expectedHeadOid: string | undefined = this.head?.sha;
+
+		if (this.isActive) {
+			// We're on the branch of the pr being merged.
+			expectedHeadOid = workingDirectorySHA;
+			if (workingDirectorySHA !== mergingPRSHA) {
+				// We are looking at different commit than what will be merged
+				const { ahead } = repository.state.HEAD!;
+				const pluralMessage = vscode.l10n.t('You have {0} unpushed commits on this pull request branch.\n\nWould you like to proceed anyway?', ahead ?? 'unknown');
+				const singularMessage = vscode.l10n.t('You have 1 unpushed commit on this pull request branch.\n\nWould you like to proceed anyway?');
+				if (ahead &&
+					(await vscode.window.showWarningMessage(
+						ahead > 1 ? pluralMessage : singularMessage,
+						{ modal: true },
+						vscode.l10n.t('Yes'),
+					)) === undefined) {
+
+					return {
+						merged: false,
+						message: vscode.l10n.t('unpushed changes'),
+					};
+				}
+			}
+
+			if (workingDirectoryIsDirty) {
+				// We have made changes to the PR that are not committed
+				if (
+					(await vscode.window.showWarningMessage(
+						vscode.l10n.t('You have uncommitted changes on this pull request branch.\n\n Would you like to proceed anyway?'),
+						{ modal: true },
+						vscode.l10n.t('Yes'),
+					)) === undefined
+				) {
+					return {
+						merged: false,
+						message: vscode.l10n.t('uncommitted changes'),
+					};
+				}
+			}
+		}
+		const input: MergePullRequestInput = {
+			pullRequestId: this.graphNodeId,
+			commitHeadline: title,
+			commitBody: description,
+			expectedHeadOid,
+			authorEmail: email,
+			mergeMethod:
+				(method?.toUpperCase() ??
+					vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<'merge' | 'squash' | 'rebase'>(DEFAULT_MERGE_METHOD, 'merge')?.toUpperCase()) as GraphQLMergeMethod,
+		};
+
+		return mutate<MergePullRequestResponse>({
+			mutation: schema.MergePullRequest,
+			variables: {
+				input
+			}
+		})
+			.then(async (result) => {
+				Logger.debug(`Merging PR: ${this.number} - done`, PullRequestModel.ID);
+
+				/* __GDPR__
+					"pr.merge.success" : {}
+				*/
+				this._telemetry.sendTelemetryEvent('pr.merge.success');
+				this._onDidChange.fire({ state: true });
+				return { merged: true, message: '', timeline: await parseCombinedTimelineEvents(result.data?.mergePullRequest.pullRequest.timelineItems.nodes ?? [], await this.getCopilotTimelineEvents(), this.githubRepository) };
+			})
+			.catch(e => {
+				/* __GDPR__
+					"pr.merge.failure" : {}
+				*/
+				this._telemetry.sendTelemetryErrorEvent('pr.merge.failure');
+				const graphQLErrors = e.graphQLErrors as GraphQLError[] | undefined;
+				if (graphQLErrors?.length && graphQLErrors.find(error => error.type === GraphQLErrorType.Unprocessable && error.message?.includes('Head branch was modified'))) {
+					return { merged: false, message: vscode.l10n.t('Head branch was modified. Pull, review, then try again.') };
+				} else {
+					throw e;
+				}
+			});
+	}
+
 	/**
 	 * Close the pull request.
 	 */
@@ -428,7 +533,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		});
 
 		this._onDidChange.fire({ timeline: true });
-		return convertRESTReviewEvent(data, this.githubRepository);
+		return convertRESTReviewEvent(data as OctokitCommon.PullsCreateReviewResponseData, this.githubRepository);
 	}
 
 	/**
@@ -459,7 +564,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			await this.updateDraftModeContext();
 			const reviewEvent = parseGraphQLReviewEvent(data!.submitPullRequestReview.pullRequestReview, this.githubRepository);
 
-			const threadWithComment = this._reviewThreadsCache.find(thread =>
+			const threadWithComment = (this._reviewThreadsCache ?? []).find(thread =>
 				thread.comments.length ? (thread.comments[0].pullRequestReviewId === reviewEvent.id) : undefined,
 			);
 			if (threadWithComment) {
@@ -497,6 +602,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	async getViewerLatestReviewCommit(): Promise<{ sha: string } | undefined> {
 		Logger.debug(`Fetch viewers latest review commit`, IssueModel.ID);
 		const { query, remote, schema } = await this.githubRepository.ensure();
+		const currentUser = (await this.githubRepository.getAuthenticatedUser()).login;
 
 		try {
 			const { data } = await query<LatestReviewCommitResponse>({
@@ -505,6 +611,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 					owner: remote.owner,
 					name: remote.repositoryName,
 					number: this.number,
+					author: currentUser,
 				},
 			});
 
@@ -512,8 +619,9 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 				Logger.error('Unexpected null repository while getting last review commit', PullRequestModel.ID);
 			}
 
-			return data.repository?.pullRequest.viewerLatestReview ? {
-				sha: data.repository?.pullRequest.viewerLatestReview.commit.oid,
+			const latestReview = data.repository?.pullRequest.reviews.nodes[0];
+			return latestReview ? {
+				sha: latestReview.commit.oid,
 			} : undefined;
 		}
 		catch (e) {
@@ -526,6 +634,10 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	 */
 	async deleteReview(): Promise<{ deletedReviewId: number; deletedReviewComments: IComment[] }> {
 		const pendingReviewId = await this.getPendingReviewId();
+		if (!pendingReviewId) {
+			throw new Error(`No pending review found for pull request #${this.number}.`);
+		}
+
 		const { mutate, schema } = await this.githubRepository.ensure();
 		const { data } = await mutate<DeleteReviewResponse>({
 			mutation: schema.DeleteReview,
@@ -535,15 +647,44 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		});
 
 		const { comments, databaseId } = data!.deletePullRequestReview.pullRequestReview;
+		const deletedReviewComments = comments.nodes.map(comment => parseGraphQLComment(comment, false, this.githubRepository));
+
+		// Update local state: remove all draft comments (and their threads if emptied) that belonged to the deleted review
+		const deletedCommentIds = new Set(deletedReviewComments.map(c => c.id));
+		const changedThreads: IReviewThread[] = [];
+		const removedThreads: IReviewThread[] = [];
+		if (!this._reviewThreadsCache) {
+			this._reviewThreadsCache = [];
+		}
+		for (let i = this._reviewThreadsCache.length - 1; i >= 0; i--) {
+			const thread = this._reviewThreadsCache[i];
+			const originalLength = thread.comments.length;
+			thread.comments = thread.comments.filter(c => !deletedCommentIds.has(c.id));
+			if (thread.comments.length === 0 && originalLength > 0) {
+				// Entire thread was composed only of comments from the deleted review; remove it.
+				this._reviewThreadsCache.splice(i, 1);
+				removedThreads.push(thread);
+			} else if (thread.comments.length !== originalLength) {
+				changedThreads.push(thread);
+			}
+		}
+		if (changedThreads.length > 0 || removedThreads.length > 0) {
+			this._onDidChangeReviewThreads.fire({ added: [], changed: changedThreads, removed: removedThreads });
+		}
+
+		// Remove from flat comments collection
+		if (this._comments) {
+			this.comments = this._comments.filter(c => !deletedCommentIds.has(c.id));
+		}
 
 		this.hasPendingReview = false;
 		await this.updateDraftModeContext();
 
-		this.getReviewThreads();
-		this._onDidChange.fire({ timeline: true });
+		// Fire change event to update timeline & comment views
+		this._onDidChange.fire({ timeline: true, comments: true });
 		return {
 			deletedReviewId: databaseId,
-			deletedReviewComments: comments.nodes.map(comment => parseGraphQLComment(comment, false, this.githubRepository)),
+			deletedReviewComments,
 		};
 	}
 
@@ -630,6 +771,9 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 		const thread = data.addPullRequestReviewThread.thread;
 		const newThread = parseGraphQLReviewThread(thread, this.githubRepository);
+		if (!this._reviewThreadsCache) {
+			this._reviewThreadsCache = [];
+		}
 		this._reviewThreadsCache.push(newThread);
 		this._onDidChangeReviewThreads.fire({ added: [newThread], changed: [], removed: [] });
 		this._onDidChange.fire({ timeline: true });
@@ -684,7 +828,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			newComment.isDraft = false;
 		}
 
-		const threadWithComment = this._reviewThreadsCache.find(thread =>
+		const threadWithComment = this._reviewThreadsCache?.find(thread =>
 			thread.comments.some(comment => comment.graphNodeId === inReplyTo),
 		);
 		if (threadWithComment) {
@@ -747,19 +891,45 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		const [data, latestReviewCommitInfo, currentUser, reviewThreads] = await Promise.all([
 			getTimelineEvents(),
 			this.getViewerLatestReviewCommit(),
+			// eslint-disable-next-line @typescript-eslint/await-thenable
 			(await this.githubRepository.getAuthenticatedUser()).login,
 			this.getReviewThreads()
 		]);
 
 
 		const ret = data?.repository?.pullRequest.timelineItems.nodes ?? [];
-		const events = await parseCombinedTimelineEvents(ret, await this.getCopilotTimelineEvents(this, true), this.githubRepository);
+		const events = await parseCombinedTimelineEvents(ret, await this.getCopilotTimelineEvents(true), this.githubRepository);
 
 		this.addReviewTimelineEventComments(events, reviewThreads);
 		insertNewCommitsSinceReview(events, latestReviewCommitInfo?.sha, currentUser, this.head);
 		Logger.debug(`Fetch timeline events of PR #${this.number} - done`, PullRequestModel.ID);
 		this.timelineEvents = events;
 		return events;
+	}
+
+	async getActivityTimelineEvents(): Promise<TimelineEvent[]> {
+		Logger.debug(`Fetch timeline events of PR #${this.number} - enter`, PullRequestModel.ID);
+		const { query, remote, schema } = await this.githubRepository.ensure();
+		try {
+			const { data } = await query<TimelineEventsResponse>({
+				query: schema.PullRequestActivityTimelineEvents,
+				variables: {
+					owner: remote.owner,
+					name: remote.repositoryName,
+					number: this.number,
+				},
+			});
+
+			if (data.repository === null) {
+				Logger.error('Unexpected null repository when fetching timeline', PullRequestModel.ID);
+			}
+
+			return parseCombinedTimelineEvents(data.repository?.pullRequest.timelineItems.nodes ?? [], [], this.githubRepository);
+		} catch (e) {
+			Logger.error(`Failed to get pull request timeline events: ${e}`, PullRequestModel.ID);
+			console.log(e);
+			return [];
+		}
 	}
 
 	private addReviewTimelineEventComments(events: TimelineEvent[], reviewThreads: IReviewThread[]): void {
@@ -829,7 +999,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	 */
 	async editReviewComment(comment: IComment, text: string): Promise<IComment> {
 		const { mutate, schema } = await this.githubRepository.ensure();
-		let threadWithComment = this._reviewThreadsCache.find(thread =>
+		let threadWithComment = this._reviewThreadsCache?.find(thread =>
 			thread.comments.some(c => c.graphNodeId === comment.graphNodeId),
 		);
 
@@ -874,7 +1044,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		try {
 			const { octokit, remote } = await this.githubRepository.ensure();
 			const id = Number(commentId);
-			const threadIndex = this._reviewThreadsCache.findIndex(thread => thread.comments.some(c => c.id === id));
+			const threadIndex = this._reviewThreadsCache?.findIndex(thread => thread.comments.some(c => c.id === id)) ?? -1;
 
 			if (threadIndex === -1) {
 				this.deleteIssueComment(commentId);
@@ -886,11 +1056,11 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 				});
 
 				if (threadIndex > -1) {
-					const threadWithComment = this._reviewThreadsCache[threadIndex];
+					const threadWithComment = this._reviewThreadsCache![threadIndex];
 					const index = threadWithComment.comments.findIndex(c => c.id === id);
 					threadWithComment.comments.splice(index, 1);
 					if (threadWithComment.comments.length === 0) {
-						this._reviewThreadsCache.splice(threadIndex, 1);
+						this._reviewThreadsCache?.splice(threadIndex, 1);
 						this._onDidChangeReviewThreads.fire({ added: [], changed: [], removed: [threadWithComment] });
 					} else {
 						this._onDidChangeReviewThreads.fire({ added: [], changed: [threadWithComment], removed: [] });
@@ -955,11 +1125,11 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			}
 
 			const baseTreeData = baseTree.data.tree.find(f => f.path === file.filename);
-			const baseMode: '100644' | '100755' | '120000' = baseTreeData?.mode as any ?? '100644';
+			const baseMode: TreeDataMode = (baseTreeData?.mode as TreeDataMode | undefined) ?? '100644';
 
 			const headTree = await octokit.call(octokit.api.git.getTree, { owner: model.prHeadOwner, repo: model.repositoryName, tree_sha: headTreeSha, recursive: 'true' });
 			const headTreeData = headTree.data.tree.find(f => f.path === file.filename);
-			const headMode: '100644' | '100755' | '120000' = headTreeData?.mode as any ?? '100644';
+			const headMode: TreeDataMode = (headTreeData?.mode as TreeDataMode | undefined) ?? '100644';
 
 			if (file.status === 'removed') {
 				// The file was removed so we use a null sha to indicate that (per GitHub's API).
@@ -1062,6 +1232,46 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	}
 
 	/**
+	 * Update the base branch of the pull request.
+	 * @param newBaseBranch The new base branch name
+	 */
+	async updateBaseBranch(newBaseBranch: string): Promise<void> {
+		Logger.debug(`Updating base branch to ${newBaseBranch} - enter`, PullRequestModel.ID);
+		try {
+			const { mutate, schema } = await this.githubRepository.ensure();
+
+			const { data } = await mutate<UpdateIssueResponse>({
+				mutation: schema.UpdatePullRequest,
+				variables: {
+					input: {
+						pullRequestId: this.graphNodeId,
+						baseRefName: newBaseBranch,
+					},
+				},
+			});
+
+			if (data?.updateIssue?.issue) {
+				// Update the local base branch reference by creating a new GitHubRef instance
+				const cloneUrl = this.base.repositoryCloneUrl.toString() || '';
+				this.base = new GitHubRef(
+					newBaseBranch,
+					`${this.base.owner}:${newBaseBranch}`,
+					this.base.sha,
+					cloneUrl,
+					this.base.owner,
+					this.base.name,
+					this.base.isInOrganization
+				);
+				this._onDidChange.fire({ base: true });
+			}
+			Logger.debug(`Updating base branch to ${newBaseBranch} - done`, PullRequestModel.ID);
+		} catch (e) {
+			Logger.error(`Updating base branch to ${newBaseBranch} failed: ${e}`, PullRequestModel.ID);
+			throw e;
+		}
+	}
+
+	/**
 	 * Get existing requests to review.
 	 */
 	async getReviewRequests(): Promise<(IAccount | ITeam)[]> {
@@ -1099,27 +1309,36 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	 */
 	async requestReview(reviewers: IAccount[], teamReviewers: ITeam[], union: boolean = false): Promise<void> {
 		const { mutate, schema } = await this.githubRepository.ensure();
-		const { data } = await mutate<GetReviewRequestsResponse>({
+		const input: { pullRequestId: string, teamIds: string[], userIds: string[], botIds?: string[], union: boolean } = {
+			pullRequestId: this.graphNodeId,
+			teamIds: teamReviewers.map(t => t.id),
+			userIds: reviewers.filter(r => r.accountType !== AccountType.Bot).map(r => r.id),
+			union
+		};
+		if (!this.githubRepository.areQueriesLimited) {
+			input.botIds = reviewers.filter(r => r.accountType === AccountType.Bot).map(r => r.id);
+		}
+
+		const { data } = await mutate<AddReviewsResponse>({
 			mutation: schema.AddReviewers,
 			variables: {
-				input: {
-					pullRequestId: this.graphNodeId,
-					teamIds: teamReviewers.map(t => t.id),
-					userIds: reviewers.filter(r => r.accountType !== AccountType.Bot).map(r => r.id),
-					botIds: reviewers.filter(r => r.accountType === AccountType.Bot).map(r => r.id),
-					union
-				},
+				input
 			},
 		});
 
-		if (!data?.repository) {
+		if (!data?.requestReviews) {
 			Logger.error('Unexpected null repository while getting review requests', PullRequestModel.ID);
 			return;
 		}
 
-		const newReviewers: (IAccount | ITeam)[] = parseGraphQLReviewers(data, this.githubRepository);
-		if (this.reviewers?.length !== newReviewers.length || (this.reviewers.some(r => !newReviewers.some(rr => rr.id === r.id)))) {
-			this.reviewers = newReviewers;
+		const newReviewers: (IAccount | ITeam)[] = [...reviewers, ...teamReviewers].filter(r => !this.reviewers?.some(rr => rr.id === r.id));
+		if (this.reviewers?.length !== newReviewers.length) {
+			if (!this.reviewers) {
+				this.reviewers = newReviewers;
+			} else {
+				this.reviewers.push(...newReviewers);
+			}
+			this.reviewers = [...this.reviewers, ...newReviewers];
 			this._onDidChange.fire({ reviewers: true });
 		}
 	}
@@ -1129,6 +1348,9 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	 * @param reviewer A GitHub Login
 	 */
 	async deleteReviewRequest(reviewers: IAccount[], teamReviewers: ITeam[]): Promise<void> {
+		if (reviewers.length === 0 && teamReviewers.length === 0) {
+			return;
+		}
 		const { octokit, remote } = await this.githubRepository.ensure();
 		await octokit.call(octokit.api.pulls.removeRequestedReviewers, {
 			owner: remote.owner,
@@ -1164,11 +1386,13 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 			}
 		});
 
-		this._onDidChangeReviewThreads.fire({
-			added,
-			changed,
-			removed,
-		});
+		if (added.length > 0 || changed.length > 0 || removed.length > 0) {
+			this._onDidChangeReviewThreads.fire({
+				added,
+				changed,
+				removed,
+			});
+		}
 	}
 
 	async initializeReviewThreadCacheAndReviewComments(): Promise<void> {
@@ -1186,7 +1410,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 	private setReviewThreadCacheFromRaw(raw: ReviewThread[]): IReviewThread[] {
 		const reviewThreads: IReviewThread[] = raw.map(thread => parseGraphQLReviewThread(thread, this.githubRepository));
-		const oldReviewThreads = this._reviewThreadsCache;
+		const oldReviewThreads = this._reviewThreadsCache ?? [];
 		this._reviewThreadsCache = reviewThreads;
 		this.diffThreads(oldReviewThreads, reviewThreads);
 		return reviewThreads;
@@ -1325,7 +1549,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		return vscode.commands.executeCommand('vscode.changes', vscode.l10n.t('Changes in Pull Request #{0}', pullRequestModel.number), args);
 	}
 
-	static async openCommitChanges(githubRepository: GitHubRepository, commitSha: string) {
+	static async openCommitChanges(extensionUri: vscode.Uri, githubRepository: GitHubRepository, commitSha: string) {
 		try {
 			const parentCommit = await githubRepository.getCommitParent(commitSha);
 			if (!parentCommit) {
@@ -1335,7 +1559,8 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 			const changes = await githubRepository.compareCommits(parentCommit, commitSha);
 			if (!changes?.files || changes.files.length === 0) {
-				vscode.window.showInformationMessage(vscode.l10n.t('No changes found in commit {0}', commitSha.substring(0, 7)));
+				// Show a webview with the empty commit message instead of a notification
+				showEmptyCommitWebview(extensionUri, commitSha);
 				return;
 			}
 
@@ -1472,6 +1697,11 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		return this._fileChanges;
 	}
 
+	private _rawFileChangesCache: IRawFileChange[] | undefined;
+	get rawFileChanges(): IRawFileChange[] | undefined {
+		return this._rawFileChangesCache;
+	}
+
 	async getFileChangesInfo() {
 		this._fileChanges.clear();
 		const data = await this.getRawFileChangesInfo();
@@ -1523,7 +1753,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	/**
 	 * List the changed files in a pull request.
 	 */
-	private async getRawFileChangesInfo(): Promise<IRawFileChange[]> {
+	public async getRawFileChangesInfo(): Promise<IRawFileChange[]> {
 		Logger.debug(`Fetch file changes, base, head and merge base of PR #${this.number} - enter`, PullRequestModel.ID);
 
 		const githubRepository = this.githubRepository;
@@ -1559,7 +1789,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 
 			// Use the original base to compare against for merged PRs
 			this.mergeBase = this.base.sha;
-
+			this._rawFileChangesCache = response;
 			return response;
 		}
 
@@ -1572,6 +1802,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		}
 
 		Logger.debug(`Fetch file changes and merge base of PR #${this.number} - done, total files ${files.length} `, PullRequestModel.ID,);
+		this._rawFileChangesCache = files;
 		return files;
 	}
 
@@ -1684,8 +1915,46 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		}
 	}
 
+	/**
+	 * Convert a pull request to draft.
+	 */
+	async convertToDraft(): Promise<ConvertToDraft> {
+		try {
+			const { mutate, schema } = await this.githubRepository.ensure();
+
+			const { data } = await mutate<ConvertPullRequestToDraftResponse>({
+				mutation: schema.ConvertToDraft,
+				variables: {
+					input: {
+						pullRequestId: this.graphNodeId,
+					},
+				},
+			});
+
+			/* __GDPR__
+				"pr.convertToDraft.success" : {}
+			*/
+			this._telemetry.sendTelemetryEvent('pr.convertToDraft.success');
+
+			const result: ConvertToDraft = {
+				isDraft: data!.convertPullRequestToDraft.pullRequest.isDraft,
+				mergeable: parseMergeability(data!.convertPullRequestToDraft.pullRequest.mergeable, data!.convertPullRequestToDraft.pullRequest.mergeStateStatus),
+			};
+			this.item.isDraft = result.isDraft;
+			this.item.mergeable = result.mergeable;
+			this._onDidChange.fire({ draft: true });
+			return result;
+		} catch (e) {
+			/* __GDPR__
+				"pr.convertToDraft.failure" : {}
+			*/
+			this._telemetry.sendTelemetryErrorEvent('pr.convertToDraft.failure');
+			throw e;
+		}
+	}
+
 	private updateCommentReactions(graphNodeId: string, reactionGroups: ReactionGroup[]) {
-		const reviewThread = this._reviewThreadsCache.find(thread =>
+		const reviewThread = this._reviewThreadsCache?.find(thread =>
 			thread.comments.some(c => c.graphNodeId === graphNodeId),
 		);
 		if (reviewThread) {
@@ -1762,7 +2031,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	}
 
 	async resolveReviewThread(threadId: string): Promise<void> {
-		const oldThread = this._reviewThreadsCache.find(thread => thread.id === threadId);
+		const oldThread = this._reviewThreadsCache?.find(thread => thread.id === threadId);
 
 		try {
 			Logger.debug(`Resolve review thread - enter`, PullRequestModel.ID);
@@ -1791,10 +2060,10 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 				throw new Error('Resolve review thread failed.');
 			}
 
-			const index = this._reviewThreadsCache.findIndex(thread => thread.id === threadId);
+			const index = this._reviewThreadsCache?.findIndex(thread => thread.id === threadId) ?? -1;
 			if (index > -1) {
 				const thread = parseGraphQLReviewThread(data.resolveReviewThread.thread, this.githubRepository);
-				this._reviewThreadsCache.splice(index, 1, thread);
+				this._reviewThreadsCache?.splice(index, 1, thread);
 				this._onDidChangeReviewThreads.fire({ added: [], changed: [thread], removed: [] });
 			}
 			Logger.debug(`Resolve review thread - done`, PullRequestModel.ID);
@@ -1805,7 +2074,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	}
 
 	async unresolveReviewThread(threadId: string): Promise<void> {
-		const oldThread = this._reviewThreadsCache.find(thread => thread.id === threadId);
+		const oldThread = this._reviewThreadsCache?.find(thread => thread.id === threadId);
 
 		try {
 			Logger.debug(`Unresolve review thread - enter`, PullRequestModel.ID);
@@ -1834,10 +2103,10 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 				throw new Error('Unresolve review thread failed.');
 			}
 
-			const index = this._reviewThreadsCache.findIndex(thread => thread.id === threadId);
+			const index = this._reviewThreadsCache?.findIndex(thread => thread.id === threadId) ?? -1;
 			if (index > -1) {
 				const thread = parseGraphQLReviewThread(data.unresolveReviewThread.thread, this.githubRepository);
-				this._reviewThreadsCache.splice(index, 1, thread);
+				this._reviewThreadsCache?.splice(index, 1, thread);
 				this._onDidChangeReviewThreads.fire({ added: [], changed: [thread], removed: [] });
 			}
 			Logger.debug(`Unresolve review thread - done`, PullRequestModel.ID);
@@ -2007,7 +2276,7 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 	async markFiles(filePathOrSubpaths: string[], event: boolean, state: 'viewed' | 'unviewed'): Promise<void> {
 		const allFilenames = filePathOrSubpaths
 			.map((f) =>
-				isDescendant(this.githubRepository.rootUri.path, f, '/')
+				isDescendant(this.githubRepository.rootUri.path, f, false, '/')
 					? f.substring(this.githubRepository.rootUri.path.length + 1)
 					: f
 			);
@@ -2024,18 +2293,22 @@ export class PullRequestModel extends IssueModel<PullRequest> implements IPullRe
 		// We only ever send 100 mutations at once. Any more than this and
 		// we risk a timeout from GitHub.
 		for (let i = 0; i < allFilenames.length; i += BATCH_SIZE) {
-			const batch = allFilenames.slice(i, i + BATCH_SIZE);
-			// See below for an example of what a mutation produced by this
-			// will look like
-			const mutation = gql`mutation Batch${mutationName}{
-				${batch.map((filename, i) =>
-				`alias${i}: ${mutationName}(
-						input: {path: "${filename}", pullRequestId: "${pullRequestId}"}
-					) { clientMutationId }
-					`
-			)}
-			}`;
-			await mutate<void>({ mutation });
+			try {
+				const batch = allFilenames.slice(i, i + BATCH_SIZE);
+				// See below for an example of what a mutation produced by this
+				// will look like
+				const mutation = gql`mutation Batch${mutationName}{
+					${batch.map((filename, i) =>
+					`alias${i}: ${mutationName}(
+							input: {path: "${filename}", pullRequestId: "${pullRequestId}"}
+						) { clientMutationId }
+						`
+				)}
+				}`;
+				await mutate<void>({ mutation });
+			} catch (e) {
+				Logger.error(`Error marking files as ${state}: ${e}`, PullRequestModel.ID);
+			}
 		}
 
 		// mutation BatchUnmarkFileAsViewedInline {

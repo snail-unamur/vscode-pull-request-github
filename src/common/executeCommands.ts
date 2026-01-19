@@ -20,10 +20,12 @@ export namespace contexts {
 	export const ACTIVE_COMMENT_HAS_SUGGESTION = 'github:activeCommentHasSuggestion'; // Boolean indicating if the active comment has a suggestion
 	export const CREATING = 'pr:creating';
 	export const NOTIFICATION_COUNT = 'github:notificationCount'; // Number of notifications in the notifications view
+	export const ACTIVATED = 'github.vscode-pull-request-github.activated'; // Boolean indicating if the extension has been activated
 }
 
 export namespace commands {
 	export const OPEN_CHAT = 'workbench.action.chat.open';
+	export const NEW_CHAT = 'workbench.action.chat.newChat';
 	export const CHAT_SETUP_ACTION_ID = 'workbench.action.chat.triggerSetup';
 
 	export const QUICK_CHAT_OPEN = 'workbench.action.quickchat.toggle';
@@ -38,5 +40,9 @@ export namespace commands {
 
 	export function setContext(context: string, value: any) {
 		return executeCommand('setContext', context, value);
+	}
+
+	export function openFolder(ur: vscode.Uri, options: { forceNewWindow?: boolean, forceReuseWindow?: boolean }) {
+		return executeCommand('vscode.openFolder', ur, options);
 	}
 }
