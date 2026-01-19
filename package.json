@@ -102,10 +102,10 @@
 			"type": "object",
 			"title": "GitHub Pull Requests",
 			"properties": {
-				"improvedPullRequests.serverURL": {
+				"precog.serverURL": {
 					"type": "string",
 					"default": "http://localhost:3000/api",
-					"description": "URL of the Improved PR server"
+					"description": "URL of the PRECOG analysis server"
 				},
 				"githubPullRequests.pullRequestTitle": {
 					"deprecationMessage": "The pull request title now uses the same defaults as GitHub, and can be edited before create.",
@@ -3720,54 +3720,54 @@
 				"description": "The color used for indicating a notification on a pull request"
 			},
 			{
-				"id": "improvedPullRequests.colorRiskA",
+				"id": "precog.colorDifficultyA",
 				"defaults": {
 					"dark": "#3FB950",
 					"light": "#3FB950",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pull request has a risk of category A."
+				"description": "The color used for indicating that a pull request has a difficulty of category A."
 			},
 			{
-				"id": "improvedPullRequests.colorRiskB",
+				"id": "precog.colorDifficultyB",
 				"defaults": {
 					"dark": "#E67E22",
 					"light": "#E67E22",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pull request has a risk of category B."
+				"description": "The color used for indicating that a pull request has a difficulty of category B."
 			},
 			{
-				"id": "improvedPullRequests.colorRiskC",
+				"id": "precog.colorDifficultyC",
 				"defaults": {
 					"dark": "#cb2431",
 					"light": "#cb2431",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pull request has a risk of category C."
+				"description": "The color used for indicating that a pull request has a difficulty of category C."
 			},
 			{
-				"id": "improvedPullRequests.colorRiskD",
+				"id": "precog.colorDifficultyD",
 				"defaults": {
 					"dark": "#2874A6",
 					"light": "#2874A6",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pull request has a risk of category D."
+				"description": "The color used for indicating that a pull request has a difficulty of category D."
 			},
 			{
-				"id": "improvedPullRequests.colorRiskE",
+				"id": "precog.colorDifficultyE",
 				"defaults": {
 					"dark": "#8957e5",
 					"light": "#8957e5",
 					"highContrast": "editor.background",
 					"highContrastLight": "editor.background"
 				},
-				"description": "The color used for indicating that a pull request has a risk of category E."
+				"description": "The color used for indicating that a pull request has a difficulty of category E."
 			}
 		],
 		"resourceLabelFormatters": [

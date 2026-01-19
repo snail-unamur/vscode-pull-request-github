@@ -1,5 +1,5 @@
-export type ImprovedPullRequestMetrics = {
-    riskValue: number,
+export type PullRequestMetrics = {
+    difficultyScore: number,
     radarMetrics: Metric[],
     defaultMetrics: Metric[],
 }
@@ -10,5 +10,5 @@ export type Metric = {
     fullName: string,
     description: string,
     radarValue: number,
-	value: number,
+    value: number,
 }

@@ -295,7 +295,7 @@ export class CategoryTreeNode extends TreeNode implements vscode.TreeItem {
 						response = await this._prsTreeModel.getAllPullRequests(this.folderRepoManager, fetchNextPage);
 						break;
 					case PRType.ImprovePR:
-						response = await this._prsTreeModel.getImprovedPullRequests(this.folderRepoManager, fetchNextPage);
+						response = await this._prsTreeModel.getPullRequestWithMetricsClient(this.folderRepoManager, fetchNextPage);
 						break;
 					case PRType.Query:
 						response = await this._prsTreeModel.getPullRequestsForQuery(this.folderRepoManager, fetchNextPage, this._categoryQuery!);

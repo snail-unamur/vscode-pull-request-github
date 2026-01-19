@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { ImprovedPullRequestMetrics } from './improvedPullRequestMetrics';
+import { PullRequestMetrics } from './pullRequestMetrics';
 import Logger from '../common/logger';
 
-export class ImprovedPullRequestClient {
+export class PullRequestMetricsClient {
   private _token: string;
   private _baseUrl: string;
 
@@ -15,7 +15,7 @@ export class ImprovedPullRequestClient {
     repoOwner: string,
     repoName: string,
     prNumber: number
-  ): Promise<ImprovedPullRequestMetrics | undefined> {
+  ): Promise<PullRequestMetrics | undefined> {
     const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest/${prNumber}`;
 
     const query = await fetch(apiUrl, {
@@ -36,7 +36,7 @@ export class ImprovedPullRequestClient {
 
     Logger.debug(
       `PR #${prNumber} metrics retrieved.`,
-      'Improved Pull Request'
+      'Pull Request With Metrics'
     );
 
     return data;
@@ -46,7 +46,7 @@ export class ImprovedPullRequestClient {
     repoOwner: string,
     repoName: string,
     prNumbers: number[]
-  ): Promise<Map<number, ImprovedPullRequestMetrics>> {
+  ): Promise<Map<number, PullRequestMetrics>> {
     const prNumberQuery = prNumbers.join(',');
     const apiUrl = `${this._baseUrl}/${repoOwner}/${repoName}/pullRequest?prNumbers=${prNumberQuery}`;
     const result = new Map();
@@ -71,7 +71,7 @@ export class ImprovedPullRequestClient {
       result.set(pr.prNumber, pr);
     });
 
-    Logger.debug('Metrics for PRs retrieved.', 'Improved Pull Request');
+    Logger.debug('Metrics for PRs retrieved.', 'Pull Request With Metrics');
 
     return result;
   }

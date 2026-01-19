@@ -58,7 +58,7 @@ import { AsyncPredicate, batchPromiseAll, compareIgnoreCase, formatError, Predic
 import { PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
 import { BRANCHES_ASSOCIATED_WITH_PRS, LAST_USED_EMAIL, NEVER_SHOW_PULL_NOTIFICATION, REPO_KEYS, ReposState } from '../extensionState';
 import { git } from '../gitProviders/gitCommands';
-import { ImprovedPullRequestClient } from '../improvedPullRequest/improvedPullRequestClient';
+import { PullRequestMetricsClient } from '../precogExtension/PullRequestMetricsClient';
 import { IThemeWatcher } from '../themeWatcher';
 import { CreatePullRequestHelper } from '../view/createPullRequestHelper';
 
@@ -278,8 +278,8 @@ export class FolderRepositoryManager extends Disposable {
 		return this._githubRepositories;
 	}
 
-	get improvedPRClient(): ImprovedPullRequestClient {
-		return this._credentialStore.improvedPRClient;
+	get precogClient(): PullRequestMetricsClient {
+		return this._credentialStore.precogClient;
 	}
 
 	public async computeAllUnknownRemotes(): Promise<Remote[]> {

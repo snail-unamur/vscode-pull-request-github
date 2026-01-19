@@ -17,11 +17,11 @@ import { commands } from '../common/executeCommands';
 import { Disposable } from '../common/lifecycle';
 import Logger from '../common/logger';
 import * as PersistentState from '../common/persistentState';
-import { GITHUB_ENTERPRISE, IMPROVED_PULL_REQUEST_NAMESPACE, METRIC_SERVER_URL, URI } from '../common/settingKeys';
+import { GITHUB_ENTERPRISE, PRECOG_NAMESPACE, PRECOG_SERVER_URL, URI } from '../common/settingKeys';
 import { initBasedOnSettingChange } from '../common/settingsUtils';
 import { ITelemetry } from '../common/telemetry';
 import { agent } from '../env/node/net';
-import { ImprovedPullRequestClient } from '../improvedPullRequest/improvedPullRequestClient';
+import { PullRequestMetricsClient } from '../precogExtension/PullRequestMetricsClient';
 
 const TRY_AGAIN = vscode.l10n.t('Try again?');
 const CANCEL = vscode.l10n.t('Cancel');
@@ -62,7 +62,7 @@ export class CredentialStore extends Disposable {
 	private _scopes: string[] = SCOPES_OLD;
 	private _scopesEnterprise: string[] = SCOPES_OLD;
 	private _isSamling: boolean = false;
-	private _improvedPRClient: ImprovedPullRequestClient;
+	private _precogClient: PullRequestMetricsClient;
 
 	private _onDidChangeSessions: vscode.EventEmitter<vscode.AuthenticationSessionsChangeEvent> = new vscode.EventEmitter();
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
@@ -80,8 +80,8 @@ export class CredentialStore extends Disposable {
 		this._register(vscode.authentication.onDidChangeSessions((e) => this.handlOnDidChangeSessions(e)));
 	}
 
-	public get improvedPRClient() {
-		return this._improvedPRClient;
+	public get precogClient() {
+		return this._precogClient;
 	}
 
 	private async handlOnDidChangeSessions(e: vscode.AuthenticationSessionsChangeEvent) {
@@ -512,8 +512,8 @@ export class CredentialStore extends Disposable {
 			};
 		}
 
-		const improvedPRBaseUrl = vscode.workspace.getConfiguration(IMPROVED_PULL_REQUEST_NAMESPACE).get<string>(METRIC_SERVER_URL);
-		this._improvedPRClient = new ImprovedPullRequestClient(token, improvedPRBaseUrl!);
+		const precogBaseURL = vscode.workspace.getConfiguration(PRECOG_NAMESPACE).get<string>(PRECOG_SERVER_URL);
+		this._precogClient = new PullRequestMetricsClient(token, precogBaseURL!);
 
 		const octokit = new Octokit({
 			request: { agent, fetch: fetchCore },

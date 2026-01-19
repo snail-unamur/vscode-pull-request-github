@@ -643,23 +643,23 @@ button.secondary.change-base {
 }
 
 .size-badge-A {
-	background-color: var(--vscode-improvedPullRequests-colorRiskA);
+	background-color: var(--vscode-precog-colorDifficultyA);
 }
 
 .size-badge-B {
-	background-color: var(--vscode-improvedPullRequests-colorRiskB);
+	background-color: var(--vscode-precog-colorDifficultyB);
 }
 
 .size-badge-C {
-	background-color: var(--vscode-improvedPullRequests-colorRiskC);
+	background-color: var(--vscode-precog-colorDifficultyC);
 }
 
 .size-badge-D {
-	background-color: var(--vscode-improvedPullRequests-colorRiskD);
+	background-color: var(--vscode-precog-colorDifficultyD);
 }
 
 .size-badge-E {
-	background-color: var(--vscode-improvedPullRequests-colorRiskE);
+	background-color: var(--vscode-precog-colorDifficultyE);
 }
 
 .size-badge-notfound {

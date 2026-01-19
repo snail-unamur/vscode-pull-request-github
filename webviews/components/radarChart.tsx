@@ -10,7 +10,7 @@ import {
 import { hexToRgba } from 'hex-and-rgba/esm';
 import React, { useMemo } from 'react';
 import { Radar } from 'react-chartjs-2';
-import { Metric } from '../../src/improvedPullRequest/improvedPullRequestMetrics';
+import { Metric } from '../../src/precogExtension/pullRequestMetrics';
 
 ChartJS.register(
   RadialLinearScale,

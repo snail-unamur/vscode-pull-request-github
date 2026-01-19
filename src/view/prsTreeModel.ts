@@ -19,7 +19,7 @@ import { CheckState, PRType, PullRequestChecks, PullRequestReviewRequirement } f
 import { PullRequestModel } from '../github/pullRequestModel';
 import { RepositoriesManager } from '../github/repositoriesManager';
 import { extractRepoFromQuery, UnsatisfiedChecks } from '../github/utils';
-import { SorteablePullRequests } from '../improvedPullRequest/sorteablePullRequests';
+import { SortablePullRequests } from '../precogExtension/sortablePullRequests';
 import { CategoryTreeNode } from './treeNodes/categoryNode';
 import { TreeNode } from './treeNodes/treeNode';
 import { CodingAgentPRAndStatus, CopilotStateModel, getCopilotQuery } from '../github/copilotPrWatcher';
@@ -580,7 +580,7 @@ export class PrsTreeModel extends Disposable {
 		return this.copilotStateModel.all;
 	}
 
-	async getImprovedPullRequests(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
+	async getPullRequestWithMetricsClient(folderRepoManager: FolderRepositoryManager, fetchNextPage: boolean, update?: boolean): Promise<ItemsResponseResult<PullRequestModel>> {
 		const cache = this.getFolderCache(folderRepoManager);
 		if (!update && cache.has(PRType.ImprovePR) && !fetchNextPage) {
 			return cache.get(PRType.ImprovePR)!.items;
@@ -592,8 +592,8 @@ export class PrsTreeModel extends Disposable {
 			{ fetchNextPage }
 		);
 
-		const improvedPRClient = folderRepoManager.improvedPRClient;
-		const sorteablePullRequests = new SorteablePullRequests(prs.items, improvedPRClient);
+		const precogClient = folderRepoManager.precogClient;
+		const sorteablePullRequests = new SortablePullRequests(prs.items, precogClient);
 
 		prs.items = await sorteablePullRequests.getSortedPullRequests();
 

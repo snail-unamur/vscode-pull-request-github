@@ -11,7 +11,7 @@ import { copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '.
 import { CopilotStartedEvent, TimelineEvent } from '../../src/common/timelineEvent';
 import { GithubItemStateEnum, StateReason } from '../../src/github/interface';
 import { CodingAgentContext, OverviewContext, PullRequest } from '../../src/github/views';
-import { ImprovedPullRequestMetrics } from '../../src/improvedPullRequest/improvedPullRequestMetrics';
+import { PullRequestMetrics } from '../../src/precogExtension/pullRequestMetrics';
 import { EDIT_TITLE_BUTTON_ID } from '../common/constants';
 import PullRequestContext from '../common/context';
 import { useStateProp } from '../common/hooks';
@@ -252,7 +252,7 @@ interface SubtitleProps {
 	head: string;
 	codingAgentEvent: TimelineEvent | undefined;
 	canEdit: boolean;
-	analysis: ImprovedPullRequestMetrics;
+	analysis: PullRequestMetrics;
 }
 
 function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, codingAgentEvent, canEdit, analysis }: SubtitleProps): JSX.Element {
@@ -277,9 +277,9 @@ function Subtitle({ state, stateReason, isDraft, isIssue, author, base, head, co
 
 			{analysis ?
 				<div id="status" className={`size-badge-A`}>
-					<span>Risk value {analysis.riskValue}</span>
+					<span>Difficulty score {analysis.difficultyScore}</span>
 				</div> : <div id="status" className={`size-badge-notfound`}>
-					<span>No risk category retreived</span>
+					<span>No difficulty score retrieved</span>
 				</div>
 			}
 

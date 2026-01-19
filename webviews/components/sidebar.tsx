@@ -473,7 +473,7 @@ function CollapsedLabel(props: PullRequest) {
 	}
 
 	if (!sections.length) {
-		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, Milestone and Risk Analysis' : 'Reviewers, Assignees, Labels, Project, Milestone and Risk Analysis'}</span>;
+		return <span className="collapsed-label">{isIssue ? 'Assignees, Labels, Project, Milestone and Difficulty Analysis' : 'Reviewers, Assignees, Labels, Project, Milestone and Risk Analysis'}</span>;
 	}
 
 	return (

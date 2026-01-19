@@ -103,5 +103,5 @@ export const CODING_AGENT_AUTO_COMMIT_AND_PUSH = 'autoCommitAndPush';
 export const CODING_AGENT_PROMPT_FOR_CONFIRMATION = 'promptForConfirmation';
 
 // Pull Request Improved
-export const IMPROVED_PULL_REQUEST_NAMESPACE = 'improvedPullRequests';
-export const METRIC_SERVER_URL = 'serverURL';
+export const PRECOG_NAMESPACE = 'precog';
+export const PRECOG_SERVER_URL = 'serverURL';

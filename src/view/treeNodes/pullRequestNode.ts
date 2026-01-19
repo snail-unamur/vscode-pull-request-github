@@ -15,7 +15,7 @@ import { createPRNodeUri, DataUri, fromPRUri, Schemes } from '../../common/uri';
 import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { CopilotWorkingStatus } from '../../github/githubRepository';
 import { IResolvedPullRequestModel, PullRequestModel } from '../../github/pullRequestModel';
-import { hasMetrics, isImprovedPullRequest } from '../../improvedPullRequest/improvedPullRequest';
+import { hasMetrics } from '../../precogExtension/pullRequestWithMetrics';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../fileChangeModel';
 import { getInMemPRFileSystemProvider, provideDocumentContentForChangeModel } from '../inMemPRContentProvider';
 import { getIconForeground, getListErrorForeground, getListWarningForeground, getNotebookStatusSuccessIconForeground } from '../theme';
@@ -309,9 +309,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 			label += '$(check) ';
 		}
 
-		const sizeCategoryPrefix = isImprovedPullRequest(this.pullRequestModel) && hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.risk} - ` : '';
-
-		label += sizeCategoryPrefix;
+		label += hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.difficultyScore} - ` : '';
 
 		if (
 			vscode.workspace
