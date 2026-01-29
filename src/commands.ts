@@ -81,11 +81,16 @@ export async function openDescription(
 	if (revealNode) {
 		descriptionNode?.reveal(descriptionNode, { select: true, focus: true });
 	}
+	const identity = {
+		owner: issue.remote.owner,
+		repo: issue.remote.repositoryName,
+		number: issue.number
+	};
 	// Create and show a new webview
 	if (issue instanceof PullRequestModel) {
-		await PullRequestOverviewPanel.createOrShow(telemetry, folderManager.context.extensionUri, folderManager, issue, undefined, preserveFocus);
+		await PullRequestOverviewPanel.createOrShow(telemetry, folderManager.context.extensionUri, folderManager, identity, issue, undefined, preserveFocus);
 	} else {
-		await IssueOverviewPanel.createOrShow(telemetry, folderManager.context.extensionUri, folderManager, issue);
+		await IssueOverviewPanel.createOrShow(telemetry, folderManager.context.extensionUri, folderManager, identity, issue);
 		/* __GDPR__
 			"issue.openDescription" : {}
 		*/
@@ -1022,8 +1027,13 @@ export function registerCommands(
 			const pr = descriptionNode.pullRequestModel;
 			const pullRequest = ensurePR(folderManager, pr);
 			descriptionNode.reveal(descriptionNode, { select: true, focus: true });
+			const identity = {
+				owner: pullRequest.remote.owner,
+				repo: pullRequest.remote.repositoryName,
+				number: pullRequest.number
+			};
 			// Create and show a new webview
-			PullRequestOverviewPanel.createOrShow(telemetry, context.extensionUri, folderManager, pullRequest, true);
+			PullRequestOverviewPanel.createOrShow(telemetry, context.extensionUri, folderManager, identity, pullRequest, true);
 
 			/* __GDPR__
 			"pr.openDescriptionToTheSide" : {}
@@ -1575,12 +1585,16 @@ ${contents}
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('pr.copyPrLink', async (params: OverviewContext | undefined) => {
-			let pr: PullRequestModel | undefined;
+			let item: PullRequestModel | IssueModel | undefined;
 			if (params) {
-				pr = await reposManager.getManagerForRepository(params.owner, params.repo)?.resolvePullRequest(params.owner, params.repo, params.number, true);
+				const folderManager = reposManager.getManagerForRepository(params.owner, params.repo);
+				item = await folderManager?.resolvePullRequest(params.owner, params.repo, params.number, true);
+				if (!item) {
+					item = await folderManager?.resolveIssue(params.owner, params.repo, params.number);
+				}
 			}
-			if (pr) {
-				return vscode.env.clipboard.writeText(pr.html_url);
+			if (item) {
+				return vscode.env.clipboard.writeText(item.html_url);
 			}
 		}));
 
@@ -1758,20 +1772,30 @@ ${contents}
 			}
 		}));
 	context.subscriptions.push(
-		vscode.commands.registerCommand('pr.applySuggestionWithCopilot', async (comment: GHPRComment) => {
+		vscode.commands.registerCommand('pr.applySuggestionWithCopilot', async (comment: GHPRComment | GHPRCommentThread) => {
 			/* __GDPR__
 				"pr.applySuggestionWithCopilot" : {}
 			*/
 			telemetry.sendTelemetryEvent('pr.applySuggestionWithCopilot');
 
-			const commentThread = comment.parent;
+			const isThread = GHPRCommentThread.is(comment);
+			const commentThread = isThread ? comment : comment.parent;
+			const commentBody = isThread ? comment.comments[0].body : comment.body;
 			commentThread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-			const message = comment.body instanceof vscode.MarkdownString ? comment.body.value : comment.body;
-			await vscode.commands.executeCommand('vscode.editorChat.start', {
-				initialRange: commentThread.range,
-				message: message,
-				autoSend: true,
-			});
+			const message = commentBody instanceof vscode.MarkdownString ? commentBody.value : commentBody;
+
+			if (isThread) {
+				// For threads, open the Chat view instead of inline chat
+				await vscode.commands.executeCommand(commands.NEW_CHAT, { inputValue: message, isPartialQuery: true, agentMode: true });
+				await vscode.commands.executeCommand(commands.OPEN_CHAT);
+			} else {
+				// For single comments, use inline chat
+				await vscode.commands.executeCommand('vscode.editorChat.start', {
+					initialRange: commentThread.range,
+					message: message,
+					autoSend: true,
+				});
+			}
 		})
 	);
 	context.subscriptions.push(

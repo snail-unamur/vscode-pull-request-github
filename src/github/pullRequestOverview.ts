@@ -17,6 +17,7 @@ import {
 	ITeam,
 	MergeMethod,
 	MergeMethodsAvailability,
+	PullRequestMergeability,
 	ReviewEventEnum,
 	ReviewState,
 } from './interface';
@@ -25,7 +26,7 @@ import { isCopilotOnMyBehalf, PullRequestModel } from './pullRequestModel';
 import { PullRequestReviewCommon, ReviewContext } from './pullRequestReviewCommon';
 import { branchPicks, pickEmail, reviewersQuickPick } from './quickPicks';
 import { parseReviewers } from './utils';
-import { CancelCodingAgentReply, ChangeBaseReply, ChangeReviewersReply, DeleteReviewResult, MergeArguments, MergeResult, PullRequest, ReviewType } from './views';
+import { CancelCodingAgentReply, ChangeBaseReply, ChangeReviewersReply, DeleteReviewResult, MergeArguments, MergeResult, PullRequest, ReviewType, UnresolvedIdentity } from './views';
 import { debounce } from '../common/async';
 import { COPILOT_ACCOUNTS, IComment } from '../common/comment';
 import { COPILOT_REVIEWER, COPILOT_REVIEWER_ACCOUNT, COPILOT_SWE_AGENT, copilotEventToStatus, CopilotPRStatus, mostRecentCopilotEvent } from '../common/copilot';
@@ -65,7 +66,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		telemetry: ITelemetry,
 		extensionUri: vscode.Uri,
 		folderRepositoryManager: FolderRepositoryManager,
-		issue: PullRequestModel,
+		identity: UnresolvedIdentity,
+		issue?: PullRequestModel,
 		toTheSide: boolean = false,
 		preserveFocus: boolean = true,
 		existingPanel?: vscode.WebviewPanel
@@ -76,7 +78,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				"isCopilot" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 			}
 		*/
-		telemetry.sendTelemetryEvent('pr.openDescription', { isCopilot: (issue.author.login === COPILOT_SWE_AGENT) ? 'true' : 'false' });
+		telemetry.sendTelemetryEvent('pr.openDescription', { isCopilot: (issue?.author.login === COPILOT_SWE_AGENT) ? 'true' : 'false' });
 
 		const activeColumn = toTheSide
 			? vscode.ViewColumn.Beside
@@ -89,7 +91,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		if (PullRequestOverviewPanel.currentPanel) {
 			PullRequestOverviewPanel.currentPanel._panel.reveal(activeColumn, preserveFocus);
 		} else {
-			const title = `Pull Request #${issue.number.toString()}`;
+			const title = `Pull Request #${identity.number.toString()}`;
 			PullRequestOverviewPanel.currentPanel = new PullRequestOverviewPanel(
 				telemetry,
 				extensionUri,
@@ -100,7 +102,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			);
 		}
 
-		await PullRequestOverviewPanel.currentPanel!.update(folderRepositoryManager, issue);
+		await PullRequestOverviewPanel.currentPanel!.updateWithIdentity(folderRepositoryManager, identity, issue);
 	}
 
 	protected override set _currentPanel(panel: PullRequestOverviewPanel | undefined) {
@@ -220,7 +222,13 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 	}
 
 	private isUpdateBranchWithGitHubEnabled(): boolean {
-		return this._item.isActive || vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get('experimentalUpdateBranchWithGitHub', false);
+		// With the GraphQL UpdatePullRequestBranch API, we can update branches even when not checked out
+		// (as long as there are no conflicts). If there are conflicts, we need the branch to be checked out.
+		const hasConflicts = this._item.item.mergeable === PullRequestMergeability.Conflict;
+		if (hasConflicts) {
+			return this._item.isActive;
+		}
+		return true;
 	}
 
 	protected override continueOnGitHub() {
@@ -361,7 +369,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				autoMerge: pullRequest.autoMerge,
 				allowAutoMerge: pullRequest.allowAutoMerge,
 				autoMergeMethod: pullRequest.autoMergeMethod,
-				mergeQueueMethod: mergeQueueMethod,
+				mergeQueueMethod,
 				mergeQueueEntry: pullRequest.mergeQueueEntry,
 				mergeCommitMeta: pullRequest.mergeCommitMeta,
 				squashCommitMeta: pullRequest.squashCommitMeta,
@@ -385,20 +393,43 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		}
 	}
 
+	/**
+	 * Override to resolve pull requests instead of issues.
+	 */
+	protected override async resolveModel(identity: UnresolvedIdentity): Promise<PullRequestModel | undefined> {
+		return this._folderRepositoryManager.resolvePullRequest(
+			identity.owner,
+			identity.repo,
+			identity.number
+		);
+	}
+
+	protected override getItemTypeName(): string {
+		return 'Pull Request';
+	}
+
+	public override async updateWithIdentity(
+		folderRepositoryManager: FolderRepositoryManager,
+		identity: UnresolvedIdentity,
+		pullRequestModel?: PullRequestModel,
+		progressLocation?: string
+	): Promise<void> {
+		await super.updateWithIdentity(folderRepositoryManager, identity, pullRequestModel, progressLocation);
+
+		// Notify that this PR overview is now active
+		PullRequestOverviewPanel._onVisible.fire(this._item);
+	}
+
 	public override async update(
 		folderRepositoryManager: FolderRepositoryManager,
 		pullRequestModel: PullRequestModel,
 	): Promise<void> {
-		const result = super.update(folderRepositoryManager, pullRequestModel, 'pr:github');
-		if (this._folderRepositoryManager !== folderRepositoryManager) {
-			this.registerPrListeners();
-		}
-
-		await result;
-		// Notify that this PR overview is now active
-		PullRequestOverviewPanel._onVisible.fire(pullRequestModel);
-
-		return result;
+		const identity: UnresolvedIdentity = {
+			owner: pullRequestModel.remote.owner,
+			repo: pullRequestModel.remote.repositoryName,
+			number: pullRequestModel.number
+		};
+		return this.updateWithIdentity(folderRepositoryManager, identity, pullRequestModel, 'pr:github');
 	}
 
 	protected override async _onDidReceiveMessage(message: IRequestMessage<any>) {
@@ -849,6 +880,19 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 
 	private async enqueue(message: IRequestMessage<void>): Promise<void> {
 		const result = await this._item.enqueuePullRequest();
+
+		// Check if auto-delete branch setting is enabled
+		const deleteBranchAfterMerge = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<boolean>(DELETE_BRANCH_AFTER_MERGE, false);
+		if (deleteBranchAfterMerge && result) {
+			// For merge queues, only delete the local branch since the PR isn't merged yet
+			try {
+				await PullRequestReviewCommon.autoDeleteLocalBranchAfterEnqueue(this._folderRepositoryManager, this._item);
+			} catch (e) {
+				Logger.appendLine(`Auto-delete local branch after enqueue failed: ${formatError(e)}`, PullRequestOverviewPanel.ID);
+				void vscode.window.showWarningMessage(vscode.l10n.t('Auto-deleting the local branch after enqueueing to the merge queue failed.'));
+			}
+		}
+
 		this._replyMessage(message, { mergeQueueEntry: result });
 	}
 

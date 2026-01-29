@@ -45,7 +45,7 @@ import { Repository } from '../api/api';
 import { GitApiImpl } from '../api/api1';
 import { AuthProvider, GitHubServerType } from '../common/authentication';
 import { COPILOT_ACCOUNTS, IComment, IReviewThread, SubjectType } from '../common/comment';
-import { COPILOT_SWE_AGENT } from '../common/copilot';
+import { COPILOT_REVIEWER, COPILOT_SWE_AGENT } from '../common/copilot';
 import { DiffHunk, parseDiffHunk } from '../common/diffHunk';
 import { emojify } from '../common/emoji';
 import { GitHubRef } from '../common/githubRef';
@@ -521,12 +521,12 @@ export function parseGraphQLReviewThread(thread: GraphQL.ReviewThread, githubRep
 		originalEndLine: thread.originalLine,
 		diffSide: thread.diffSide,
 		isOutdated: thread.isOutdated,
-		comments: thread.comments.nodes.map(comment => parseGraphQLComment(comment, thread.isResolved, githubRepository)),
+		comments: thread.comments.nodes.map(comment => parseGraphQLComment(comment, thread.isResolved, thread.isOutdated, githubRepository)),
 		subjectType: thread.subjectType ?? SubjectType.LINE
 	};
 }
 
-export function parseGraphQLComment(comment: GraphQL.ReviewComment, isResolved: boolean, githubRepository: GitHubRepository): IComment {
+export function parseGraphQLComment(comment: GraphQL.ReviewComment, isResolved: boolean, isOutdated: boolean, githubRepository: GitHubRepository): IComment {
 	const specialAuthor = COPILOT_ACCOUNTS[comment.author?.login ?? ''];
 	const c: IComment = {
 		id: comment.databaseId,
@@ -551,6 +551,7 @@ export function parseGraphQLComment(comment: GraphQL.ReviewComment, isResolved: 
 		inReplyToId: comment.replyTo && comment.replyTo.databaseId,
 		reactions: parseGraphQLReaction(comment.reactionGroups),
 		isResolved,
+		isOutdated
 	};
 
 	const diffHunks = parseCommentDiffHunk(c);
@@ -573,7 +574,7 @@ export function parseGraphQlIssueComment(comment: GraphQL.IssueComment, githubRe
 		htmlUrl: comment.url,
 		graphNodeId: comment.id,
 		diffHunk: '',
-		reactions: parseGraphQLReaction(comment.reactionGroups),
+		reactions: parseGraphQLReaction(comment.reactionGroups)
 	};
 }
 
@@ -1030,7 +1031,7 @@ export function parseGraphQLReviewEvent(
 ): Common.ReviewEvent {
 	return {
 		event: Common.EventType.Reviewed,
-		comments: review.comments.nodes.map(comment => parseGraphQLComment(comment, false, githubRepository)).filter(c => !c.inReplyToId),
+		comments: review.comments.nodes.map(comment => parseGraphQLComment(comment, false, false, githubRepository)).filter(c => !c.inReplyToId),
 		submittedAt: review.submittedAt,
 		body: review.body,
 		bodyHTML: review.bodyHTML,
@@ -1059,9 +1060,9 @@ export function parseSelectRestTimelineEvents(
 
 	let sessionIndex = 0;
 	for (const event of events) {
-		const eventNode = event as { created_at?: string; node_id?: string; actor: RestAccount };
+		const eventNode = event as { created_at?: string; node_id?: string; actor: RestAccount, performed_via_github_app?: { slug: string } | null };
 		if (eventNode.created_at && eventNode.node_id) {
-			if (event.event === 'copilot_work_started') {
+			if (event.event === 'copilot_work_started' && eventNode.performed_via_github_app?.slug === COPILOT_SWE_AGENT) {
 				parsedEvents.push({
 					id: eventNode.node_id,
 					event: Common.EventType.CopilotStarted,
@@ -1072,7 +1073,7 @@ export function parseSelectRestTimelineEvents(
 						sessionIndex
 					}
 				});
-			} else if (event.event === 'copilot_work_finished') {
+			} else if (event.event === 'copilot_work_finished' && eventNode.performed_via_github_app?.slug === COPILOT_SWE_AGENT) {
 				parsedEvents.push({
 					id: eventNode.node_id,
 					event: Common.EventType.CopilotFinished,
@@ -1091,6 +1092,12 @@ export function parseSelectRestTimelineEvents(
 						...prSessionLink,
 						sessionIndex
 					}
+				});
+			} else if (event.event === 'copilot_work_started' && eventNode.performed_via_github_app?.slug === COPILOT_REVIEWER) {
+				parsedEvents.push({
+					id: eventNode.node_id,
+					event: Common.EventType.CopilotReviewStarted,
+					createdAt: eventNode.created_at,
 				});
 			}
 		}
@@ -1113,6 +1120,7 @@ export function eventTime(event: Common.TimelineEvent): Date | undefined {
 		case Common.EventType.CopilotStarted:
 		case Common.EventType.CopilotFinished:
 		case Common.EventType.CopilotFinishedError:
+		case Common.EventType.CopilotReviewStarted:
 			return new Date(event.createdAt);
 		case Common.EventType.Reviewed:
 			return new Date(event.submittedAt);
@@ -1264,6 +1272,9 @@ export async function parseCombinedTimelineEvents(
 				break;
 			case Common.EventType.CrossReferenced:
 				const crossRefEv = event as GraphQL.CrossReferencedEvent;
+				if (!crossRefEv.source) {
+					break;
+				}
 				const isIssue = crossRefEv.source.__typename === 'Issue';
 				const extensionUrl = isIssue
 					? await toOpenIssueWebviewUri({ owner: crossRefEv.source.repository.owner.login, repo: crossRefEv.source.repository.name, issueNumber: crossRefEv.source.number })

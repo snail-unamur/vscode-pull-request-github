@@ -2837,7 +2837,7 @@
 				},
 				{
 					"command": "pr.openChanges",
-					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /(pullrequest|description)/ && config.multiDiffEditor.experimental.enabled",
+					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /(pullrequest|description)/",
 					"group": "2_pullrequest@1"
 				},
 				{
@@ -2882,7 +2882,7 @@
 				},
 				{
 					"command": "pr.openChanges",
-					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /(pullrequest|description)/ && config.multiDiffEditor.experimental.enabled",
+					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /(pullrequest|description)/",
 					"group": "inline@0"
 				},
 				{
@@ -3109,6 +3109,11 @@
 					"command": "pr.unresolveReviewThreadFromView",
 					"group": "context@1",
 					"when": "commentController =~ /^github-(browse|review)/ && commentThread =~ /canUnresolve/"
+				},
+				{
+					"command": "pr.applySuggestionWithCopilot",
+					"group": "context@2",
+					"when": "commentController =~ /^github-review/"
 				}
 			],
 			"editor/title": [
@@ -3265,7 +3270,7 @@
 				},
 				{
 					"command": "pr.applySuggestionWithCopilot",
-					"when": "commentController =~ /^github-review/ && !(comment =~ /hasSuggestion/)"
+					"when": "commentController =~ /^github-review/"
 				}
 			],
 			"comments/comment/title": [
@@ -3277,7 +3282,7 @@
 				{
 					"command": "pr.applySuggestionWithCopilot",
 					"group": "overflow@0",
-					"when": "commentController =~ /^github-review/ && !(comment =~ /hasSuggestion/)"
+					"when": "commentController =~ /^github-review/"
 				},
 				{
 					"command": "pr.editComment",
@@ -3561,7 +3566,7 @@
 				},
 				{
 					"command": "pr.copyPrLink",
-					"when": "webviewId == PullRequestOverview && github:copyMenu"
+					"when": "(webviewId == PullRequestOverview || webviewId == IssueOverview) && github:copyMenu"
 				},
 				{
 					"command": "pr.copyVscodeDevPrLink",

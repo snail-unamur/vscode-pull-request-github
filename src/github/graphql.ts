@@ -39,7 +39,7 @@ export interface CrossReferencedEvent {
 	id: string;
 	actor: Actor;
 	createdAt: string;
-	source: {
+	source?: {
 		__typename: string;
 		number: number;
 		url: string;
@@ -542,6 +542,15 @@ export interface DequeuePullRequestResponse {
 export interface EnqueuePullRequestResponse {
 	enqueuePullRequest: {
 		mergeQueueEntry: MergeQueueEntry;
+	}
+}
+
+export interface UpdatePullRequestBranchResponse {
+	updatePullRequestBranch: {
+		pullRequest: {
+			id: string;
+			headRefOid: string;
+		}
 	}
 }
 

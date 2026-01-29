@@ -773,7 +773,7 @@ export class IssueFeatureRegistrar extends Disposable {
 				assignees: template.assignees,
 			};
 		}
-		this.makeNewIssueFile(uri, options);
+		await this.makeNewIssueFile(uri, options);
 	}
 
 	async createIssueFromFile() {
@@ -1120,7 +1120,7 @@ export class IssueFeatureRegistrar extends Disposable {
 			quickInput.busy = true;
 			this.createIssueInfo = { document, newIssue, lineNumber, insertIndex };
 
-			this.makeNewIssueFile(document.uri, { title, body, assignees });
+			await this.makeNewIssueFile(document.uri, { title, body, assignees });
 			quickInput.busy = false;
 			quickInput.hide();
 		});
@@ -1528,7 +1528,12 @@ ${options?.body ?? ''}\n
 								await vscode.env.clipboard.writeText(issue.html_url);
 								break;
 							case openIssue:
-								await IssueOverviewPanel.createOrShow(this.telemetry, this.context.extensionUri, constFolderManager, issue);
+								const identity = {
+									owner: issue.remote.owner,
+									repo: issue.remote.repositoryName,
+									number: issue.number
+								};
+								await IssueOverviewPanel.createOrShow(this.telemetry, this.context.extensionUri, constFolderManager, identity, issue);
 								break;
 						}
 					});
