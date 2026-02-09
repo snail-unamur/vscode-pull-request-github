@@ -15,6 +15,7 @@ import { createPRNodeUri, DataUri, fromPRUri, Schemes } from '../../common/uri';
 import { FolderRepositoryManager } from '../../github/folderRepositoryManager';
 import { CopilotWorkingStatus } from '../../github/githubRepository';
 import { IResolvedPullRequestModel, PullRequestModel } from '../../github/pullRequestModel';
+import { hasMetrics } from '../../precogExtension/pullRequestWithMetrics';
 import { InMemFileChangeModel, RemoteFileChangeModel } from '../fileChangeModel';
 import { getInMemPRFileSystemProvider, provideDocumentContentForChangeModel } from '../inMemPRContentProvider';
 import { getIconForeground, getListErrorForeground, getListWarningForeground, getNotebookStatusSuccessIconForeground } from '../theme';
@@ -314,6 +315,8 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider2 
 		if (currentBranchIsForThisPR) {
 			label += '$(check) ';
 		}
+
+		label += hasMetrics(this.pullRequestModel) ? `${this.pullRequestModel.difficultyScore} - ` : '';
 
 		if (
 			vscode.workspace

@@ -642,6 +642,30 @@ button.secondary.change-base {
 	background-color: var(--vscode-pullRequests-draft);
 }
 
+.size-badge-A {
+	background-color: var(--vscode-precog-colorDifficultyA);
+}
+
+.size-badge-B {
+	background-color: var(--vscode-precog-colorDifficultyB);
+}
+
+.size-badge-C {
+	background-color: var(--vscode-precog-colorDifficultyC);
+}
+
+.size-badge-D {
+	background-color: var(--vscode-precog-colorDifficultyD);
+}
+
+.size-badge-E {
+	background-color: var(--vscode-precog-colorDifficultyE);
+}
+
+.size-badge-notfound {
+	background-color: var(--vscode-badge-background);
+}
+
 .section {
 	padding-bottom: 16px;
 	border-bottom: 1px solid var(--vscode-editorWidget-border);
@@ -1357,6 +1381,11 @@ code {
 	/* Hides bottom borders on bottom two sections */
 	.section:nth-last-child(-n + 2) {
 		border-bottom: none;
+	}
+
+	.radar {
+		grid-row: 2 / span 3;
+		grid-column: 2 / 3;
 	}
 }
 

@@ -38,6 +38,7 @@ import { ITelemetry } from '../common/telemetry';
 import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
+import { pullRequestWithMetrics } from '../precogExtension/pullRequestWithMetrics';
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
@@ -287,7 +288,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			this._updatingPromise = clearingPromise;
 
 			const [
-				pullRequest,
+				pullRequestRef,
 				timelineEvents,
 				defaultBranch,
 				status,
@@ -311,6 +312,10 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
 			}
+
+			const pullRequestMetricsClient = this._folderRepositoryManager.precogClient;
+			const pullRequest = pullRequestWithMetrics(pullRequestRef, pullRequestMetricsClient);
+			await pullRequest.retrieveMetrics();
 
 			if (!this._item.equals(pullRequestModel)) {
 				// Updated PR is no longer the current one
@@ -373,6 +378,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				mergeQueueEntry: pullRequest.mergeQueueEntry,
 				mergeCommitMeta: pullRequest.mergeCommitMeta,
 				squashCommitMeta: pullRequest.squashCommitMeta,
+				analysis: pullRequest.metrics,
 				isIssue: false,
 				emailForCommit,
 				currentUserReviewState: reviewState,
