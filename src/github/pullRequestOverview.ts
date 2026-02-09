@@ -280,7 +280,12 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				pullRequestModel.validateDraftMode(),
 				this._folderRepositoryManager.getAssignableUsers()
 			]);
-			this._updatingPromise = updatingPromise;
+			const clearingPromise = updatingPromise.finally(() => {
+				if (this._updatingPromise === clearingPromise) {
+					this._updatingPromise = undefined;
+				}
+			});
+			this._updatingPromise = clearingPromise;
 
 			const [
 				pullRequestRef,
@@ -301,8 +306,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				hasReviewDraft,
 				assignableUsers
 			] = await updatingPromise;
-			this._updatingPromise = undefined;
-			if (!pullRequestRef) {
+
+			if (!pullRequest) {
 				throw new Error(
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
