@@ -553,6 +553,12 @@ button.inlined-dropdown:last-child {
 	animation: spinner-rotate 1s linear infinite;
 }
 
+.metric-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
 @keyframes spinner-rotate {
 	0% {
 		transform: rotate(0deg);

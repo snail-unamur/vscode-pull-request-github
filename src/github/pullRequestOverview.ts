@@ -40,6 +40,7 @@ import { EventType, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../commo
 import { asPromise, formatError } from '../common/utils';
 import { IRequestMessage, PULL_REQUEST_OVERVIEW_VIEW_TYPE } from '../common/webview';
 import { toCheckRunLogUri } from '../view/checkRunLogContentProvider';
+import { pullRequestWithMetrics } from '../precogExtension/pullRequestWithMetrics';
 
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static override ID: string = 'PullRequestOverviewPanel';
@@ -336,7 +337,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			this._updatingPromise = clearingPromise;
 
 			const [
-				pullRequest,
+				pullRequestRef,
 				timelineEvents,
 				defaultBranch,
 				status,
@@ -360,6 +361,10 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 					`Fail to resolve Pull Request #${pullRequestModel.number} in ${pullRequestModel.remote.owner}/${pullRequestModel.remote.repositoryName}`,
 				);
 			}
+
+			const pullRequestMetricsClient = this._folderRepositoryManager.precogClient;
+			const pullRequest = pullRequestWithMetrics(pullRequestRef, pullRequestMetricsClient);
+			await pullRequest.retrieveMetrics();
 
 			this._item = pullRequest;
 			this.registerPrListeners();
@@ -417,6 +422,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				mergeQueueEntry: pullRequest.mergeQueueEntry,
 				mergeCommitMeta: pullRequest.mergeCommitMeta,
 				squashCommitMeta: pullRequest.squashCommitMeta,
+				analysis: pullRequest.metrics,
 				isIssue: false,
 				emailForCommit,
 				currentUserReviewState: reviewState,

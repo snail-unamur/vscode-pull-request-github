@@ -9,6 +9,7 @@ export enum PRType {
 	Query,
 	All,
 	LocalPullRequest,
+	ImprovePR,
 }
 
 export enum ReviewEventEnum {

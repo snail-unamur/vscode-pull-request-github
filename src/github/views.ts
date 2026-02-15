@@ -21,6 +21,7 @@ import {
 } from './interface';
 import { IComment } from '../common/comment';
 import { CommentEvent, ReviewEvent, SessionLinkInfo, TimelineEvent } from '../common/timelineEvent';
+import { PullRequestMetrics } from '../precogExtension/pullRequestMetrics';
 
 export enum ReviewType {
 	Comment = 'comment',
@@ -111,6 +112,7 @@ export interface PullRequest extends Issue {
 	revertable?: boolean;
 	busy?: boolean;
 	loadingCommit?: string;
+	analysis: PullRequestMetrics;
 	generateDescriptionTitle?: string;
 }
 
